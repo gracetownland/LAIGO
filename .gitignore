@@ -1,6 +1,6 @@
 .kiro/*
 .agent/*
-code-review-cdk-infrastructure
+docs/code-reviews/*
 node_modules/
 cdk.out/
 dist/
