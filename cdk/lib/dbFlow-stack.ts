@@ -74,6 +74,17 @@ export class DBFlowStack extends Stack {
       },
     );
 
+    // Create a Lambda layer for the AWS RDS CA certificate bundle
+    const rdsCaLayer = new lambda.LayerVersion(
+      this,
+      "rdsCaCertLayer",
+      {
+        code: lambda.Code.fromAsset("./layers/rds-ca-bundle"),
+        compatibleRuntimes: [lambda.Runtime.NODEJS_22_X],
+        description: "Lambda layer with AWS RDS CA certificate bundle",
+      },
+    );
+
     new triggers.TriggerFunction(this, `${id}-triggerLambda`, {
       description: `Database initializer and migration runner - ${new Date().toISOString()}`,
       functionName: `${id}-initializerFunction`,
@@ -85,11 +96,11 @@ export class DBFlowStack extends Stack {
         DB_SECRET_NAME: db.secretPathAdmin.secretName,
         DB_USER_SECRET_NAME: db.secretPathUser.secretName,
         DB_TABLE_CREATOR_SECRET_NAME: db.secretPathTableCreator.secretName,
-        NODE_TLS_REJECT_UNAUTHORIZED: "0", // Accept self-signed certificates from RDS Proxy
+        NODE_EXTRA_CA_CERTS: "/opt/rds-ca/global-bundle.pem",
       },
       vpc: db.dbInstance.vpc,
       code: lambda.Code.fromAsset("lambda/db_setup"),
-      layers: [nodePgMigrateLayer],
+      layers: [nodePgMigrateLayer, rdsCaLayer],
       role: lambdaRole,
     });
   }

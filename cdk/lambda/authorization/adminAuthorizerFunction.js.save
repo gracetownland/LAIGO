@@ -1,0 +1,235 @@
+/**
+ * Admin Authorizer Lambda Function
+ *
+ * This Lambda authorizer validates JWT tokens from an IDP (Identity Provider)
+ * and resolves the user identifier to database userId for downstream handlers.
+ *
+ * Flow:
+ * 1. API Gateway receives request with Authorization header
+ * 2. Invokes this Lambda with the token
+ * 3. Lambda verifies token signature and expiration
+ * 4. Extracts "sub" claim as idpId
+ * 5. Queries database to resolve idpId to userId
+ * 6. Returns IAM policy with userId and user metadata in context
+ *
+ * Note: Authorization checks (role validation) are performed by API handlers
+ * using the userId from context, not by this authorizer.
+ */
+
+const {
+  SecretsManagerClient,
+  GetSecretValueCommand,
+} = require("@aws-sdk/client-secrets-manager");
+const { CognitoJwtVerifier } = require("aws-jwt-verify");
+const { initializeConnection } = require("./initializeConnection");
+const { Logger } = require("@aws-lambda-powertools/logger");
+const logger = new Logger({ serviceName: "AdminAuthorizer" });
+
+// Create a Secrets Manager client
+const secretsManager = new SecretsManagerClient();
+
+// Environment variables for IDP configuration
+let { SM_IDP_CREDENTIALS } = process.env;
+
+/**
+ * Factory function that builds a fresh IAM policy response for each invocation.
+ * Returns a new object with its own Statement array to prevent accumulation
+ * across warm Lambda invocations.
+ *
+ * @param {string} principalId - Database user identifier
+ * @param {string} effect - IAM effect ("Allow" or "Deny")
+ * @param {string} resource - API Gateway method ARN pattern
+ * @param {object} context - Additional context passed to backend Lambda functions
+ * @returns {object} Fresh IAM policy response object
+ */
+function buildAuthResponse(principalId, effect, resource, context) {
+  return {
+    principalId,
+    policyDocument: {
+      Version: "2012-10-17",
+      Statement: [{
+        Action: "execute-api:Invoke",
+        Effect: effect,
+        Resource: resource,
+      }],
+    },
+    context: context || {},
+  };
+}
+
+// JWT verifier instance (initialized once during cold start for performance)
+// Caches JWKS (JSON Web Key Set) to avoid fetching on every invocation
+let jwtVerifier;
+
+// User metadata cache for Lambda execution context
+// Avoids repeated database queries within the same invocation
+let userMetadataCache = {};
+
+/**
+ * Query database to resolve idpId to userId and retrieve user metadata
+ * Implements execution context caching to avoid repeated queries
+ */
+async function getUserMetadataFromDatabase(idpId, forceRefresh = false) {
+  // Check cache first
+  if (!forceRefresh && userMetadataCache[idpId]) {
+    logger.info("Using cached user metadata", { idpId });
+    return userMetadataCache[idpId];
+  }
+
+  // Ensure database connection is initialized
+  if (!global.sqlConnection) {
+    await initializeConnection();
+  }
+
+  const sqlConnection = global.sqlConnection;
+
+  try {
+    // Query database by idp_id
+    const result = await sqlConnection`
+      SELECT user_id, user_email, first_name, last_name, roles
+      FROM users
+      WHERE idp_id = ${idpId};
+    `;
+
+    if (result.length === 0) {
+      throw new Error("User not found");
+    }
+
+    const user = {
+      user_id: result[0].user_id,
+      email: result[0].user_email,
+      first_name: result[0].first_name,
+      last_name: result[0].last_name,
+      roles: result[0].roles,
+    };
+
+    // Cache for this execution context
+    userMetadataCache[idpId] = user;
+
+    return user;
+  } catch (error) {
+    logger.error("Database query failed", {
+      idpId,
+      errorType: error.name,
+      errorMessage: error.message,
+    });
+    throw error;
+  }
+}
+
+/**
+ * Initialize JWT verifier with IDP configuration from Secrets Manager
+ * Called once during Lambda cold start to set up the verifier
+ */
+async function initializeJwtVerifier() {
+  try {
+    // Retrieve IDP configuration from Secrets Manager
+    const getSecretValueCommand = new GetSecretValueCommand({
+      SecretId: SM_IDP_CREDENTIALS,
+    });
+    const secretResponse = await secretsManager.send(getSecretValueCommand);
+
+    const credentials = JSON.parse(secretResponse.SecretString);
+
+    // Create JWT verifier configured to validate tokens from the IDP
+    // Note: NO group validation - authorization is handled by API handlers
+    jwtVerifier = CognitoJwtVerifier.create({
+      userPoolId: credentials.JWT_ISSUER_ID,
+      tokenUse: "id", // Validate ID tokens (not access tokens)
+      clientId: credentials.JWT_CLIENT_ID,
+      // NO groups parameter - we don't validate groups in JWT
+    });
+
+    // Log verifier initialization (no secrets)
+    logger.info("Admin JWT verifier initialized", {
+      issuerId: credentials.JWT_ISSUER_ID,
+    });
+  } catch (error) {
+    logger.error("Error initializing JWT verifier", error);
+    throw new Error("Failed to initialize JWT verifier");
+  }
+}
+
+/**
+ * Lambda handler function invoked by API Gateway for authorization
+ */
+exports.handler = async (event) => {
+  // Initialize verifier on first invocation (cold start)
+  if (!jwtVerifier) {
+    await initializeJwtVerifier();
+  }
+
+  // Extract JWT token from Authorization header
+  const accessToken = event.authorizationToken.toString();
+  logger.info("Admin authorizer invoked", { methodArn: event.methodArn });
+  let payload;
+
+  try {
+    // Verify token signature and expiration (NO group validation)
+    payload = await jwtVerifier.verify(accessToken);
+
+    // Extract idpId from "sub" claim
+    const idpId = payload.sub;
+
+    // Query database to resolve idpId to userId
+    let user;
+    try {
+      user = await getUserMetadataFromDatabase(idpId);
+    } catch (error) {
+      logger.error("User lookup failed", {
+        idpId,
+        errorType: error.name,
+        errorMessage: error.message,
+      });
+      throw new Error("Unauthorized");
+    }
+
+    // Enforce role membership — user must hold the admin role in the database.
+    // Re-fetch once from DB before deny to avoid stale warm-cache role misses.
+    if (!user.roles || !user.roles.includes("admin")) {
+      user = await getUserMetadataFromDatabase(idpId, true);
+
+      if (!user.roles || !user.roles.includes("admin")) {
+        logger.warn("Access denied: user does not have admin role", {
+          userId: user.user_id,
+        });
+        throw new Error("Unauthorized");
+      }
+    }
+
+    // Use a scoped wildcard to allow caching across all endpoints within this role's scope
+    // This allows the authorizer to be cached while ensuring the policy doesn't leak access to other roles.
+    const parts = event.methodArn.split("/");
+    const resource = parts.slice(0, 2).join("/") + "/*/admin/*";
+
+    // Build a fresh IAM policy response for this invocation
+    return buildAuthResponse(user.user_id, "Allow", resource, {
+      userId: user.user_id,
+      email: user.email,
+      firstName: user.first_name || "",
+      lastName: user.last_name || "",
+      roles: JSON.stringify(user.roles), // API Gateway requires string values
+    });
+  } catch (error) {
+    logger.error("Authorization error", error);
+    // API Gateway requires exact "Unauthorized" message for 401 response
+:CI = "true"; npx jest security-hardening --no-coverage --forceExit 
+:2>&1 throw new Error("Unauthorized");
+cd "c:\Users\jkalir01\Documents\deployments\LAIGO\cdk" ; node node_modules/.bin/jest security-hardening --no-coverage --forceExit --ci 2>&1
+cd "c:\Users\jkalir01\Documents\deployments\LAIGO\cdk" ; node ./node_modules/jest/bin/jest.js --testPathPattern=security-hardening --no-coverage --forceExit --ci
+cd "c:\Users\jkalir01\Documents\deployments\LAIGO\cdk" ; node -e "const {execSync} = require('child_process'); try { const out = execSync('npx jest security-hardening --no-coverage --forceExit --ci', {cwd: '.', encoding: 'utf8', timeout: 240000, env: {...process.env, CI: 'true'}}); console.log(out); } catch(e) { console.log(e.stdout || ''); console.log(e.stderr || ''); console.log('Exit code:', e.status); }"
+cd "c:\Users\jkalir01\Documents\deployments\LAIGO\cdk" ; node run-security-tests.js
+timeout /t 30 /nobreak > nul
+Start-Sleep -Seconds 60
+cd "c:\Users\jkalir01\Documents\deployments\LAIGO\cdk" ; node -e "const rds = require('aws-cdk-lib/aws-rds'); const versions = Object.keys(rds.PostgresEngineVersion).filter(k => k.startsWith('VER_17')); console.log(versions.join(', '));"
+Start-Sleep -Seconds 5
+Start-Sleep -Seconds 90
+Start-Sleep -Seconds 120
+cd "c:\Users\jkalir01\Documents\deployments\LAIGO\cdk" ; $env:CI='true'; $env:FORCE_COLOR='0'; node ./node_modules/jest/bin/jest.js --testPathPattern security-hardening --no-coverage --forceExit --ci 2>&1 | Out-String
+cd "c:\Users\jkalir01\Documents\deployments\LAIGO\cdk" ; powershell -NoProfile -NonInteractive -Command "Set-Location 'c:\Users\jkalir01\Documents\deployments\LAIGO\cdk'; $env:CI='true'; $env:FORCE_COLOR='0'; node ./node_modules/jest/bin/jest.js --testPathPattern security-hardening --no-coverage --forceExit --ci 2>&1 | Out-File -FilePath 'test-output.txt' -Encoding utf8; Get-Content 'test-output.txt'"
+  }
+};
+Get-Process | Where-Object { $_.Modules.FileName -like "*security-hardening*" } 2>$null; Get-ChildItem "C:\Users\jkalir01\.kiro\tasks\840638874cff0c72\" -ErrorAction SilentlyContinue
+
+// Export buildAuthResponse for testing
+exports.buildAuthResponse = buildAuthResponse;

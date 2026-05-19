@@ -1,0 +1,108 @@
+version: 2
+updates:
+  # Root CDK runtime dependencies (aws-cdk-lib, constructs)
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      aws-cdk:
+        patterns:
+          - "aws-cdk*"
+          - "constructs"
+
+  # Frontend npm dependencies
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    groups:
+      dev-dependencies:
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
+      production-dependencies:
+        dependency-type: "production"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # CDK npm dependencies
+  - package-ecosystem: "npm"
+    directory: "/cdk"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      aws-cdk:
+        patterns:
+          - "aws-cdk*"
+          - "@aws-cdk/*"
+          - "constructs"
+
+  # Lambda layers (Node.js)
+  - package-ecosystem: "npm"
+    directory: "/cdk/layers/postgres"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+
+  - package-ecosystem: "npm"
+    directory: "/cdk/layers/node-pg-migrate"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+
+  - package-ecosystem: "npm"
+    directory: "/cdk/layers/aws-jwt-verify"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+
+  # Python Lambda - text_generation
+  - package-ecosystem: "pip"
+    directory: "/cdk/lambda/text_generation"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+
+  # Python Lambda - playground_generation
+  - package-ecosystem: "pip"
+    directory: "/cdk/lambda/playground_generation"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+
+  # Python Lambda layer - psycopg3
+  - package-ecosystem: "pip"
+    directory: "/cdk/layers/psycopg3"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+
+  # Docker base images for Python Lambda functions
+  - package-ecosystem: "docker"
+    directory: "/cdk/lambda/text_generation"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+
+  - package-ecosystem: "docker"
+    directory: "/cdk/lambda/playground_generation"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+
+  # GitHub Actions workflow dependencies
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      github-actions:
+        patterns:
+          - "*"

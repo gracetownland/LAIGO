@@ -6,9 +6,15 @@ const {
 const { Client } = require("pg");
 const crypto = require("crypto");
 const path = require("path");
+const fs = require("fs");
 const migrate = require("node-pg-migrate").default;
 
 const sm = new SecretsManagerClient();
+
+// Load the AWS RDS CA certificate bundle for TLS verification
+const rdsCaCert = fs.readFileSync(
+  process.env.NODE_EXTRA_CA_CERTS || "/opt/rds-ca/global-bundle.pem"
+);
 
 async function getSecret(name) {
   const data = await sm.send(new GetSecretValueCommand({ SecretId: name }));
@@ -26,12 +32,12 @@ async function putSecret(name, secret) {
 
 
 async function runMigrations(db, direction = "up", count = Infinity) {
-  // Use SSL with relaxed certificate validation for RDS Proxy self-signed certificates
+  // Use SSL with full certificate validation against the AWS RDS CA bundle
   const dbUrl = `postgresql://${encodeURIComponent(
     db.username
   )}:${encodeURIComponent(db.password)}@${db.host}:${db.port || 5432}/${
     db.dbname
-  }?sslmode=require`;
+  }?sslmode=verify-full`;
   
   try {
     await migrate({
@@ -44,17 +50,17 @@ async function runMigrations(db, direction = "up", count = Infinity) {
       createSchema: false,
       // Pass SSL config via databaseUrlConfig for node-pg-migrate
       databaseUrlConfig: {
-        ssl: { rejectUnauthorized: false }, // Accept RDS Proxy self-signed certificates
+        ssl: { rejectUnauthorized: true, ca: rdsCaCert.toString() },
       },
     });
-    console.log("Database migrations completed successfully with SSL/TLS");
+    console.log("Database migrations completed successfully with SSL/TLS certificate verification");
   } catch (error) {
     console.error("Error running migrations:", error);
     console.error("Migration connection details:", {
       host: db.host,
       port: db.port || 5432,
       database: db.dbname,
-      sslMode: 'require',
+      sslMode: 'verify-full',
     });
     throw error;
   }
@@ -70,14 +76,14 @@ async function createAppUsers(
   userSecretName,
   tableCreatorSecretName
 ) {
-  // Use SSL with relaxed certificate validation for RDS Proxy self-signed certificates
+  // Use SSL with full certificate validation against the AWS RDS CA bundle
   const adminClient = new Client({
     user: adminDb.username,
     password: adminDb.password,
     host: adminDb.host,
     database: adminDb.dbname,
     port: adminDb.port || 5432,
-    ssl: { rejectUnauthorized: false }, // Accept RDS Proxy self-signed certificates
+    ssl: { rejectUnauthorized: true, ca: rdsCaCert.toString() },
   });
   
   try {

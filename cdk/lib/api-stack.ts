@@ -101,10 +101,9 @@ export class ApiGatewayStack extends cdk.Stack {
 
     // Compute allowed CORS origin from optional domainName prop
     const allowedOrigin = props.domainName ? `https://${props.domainName}` : "";
-    const localDevOrigin = "http://localhost:5173";
     const s3CorsAllowedOrigins = allowedOrigin
-      ? [allowedOrigin, localDevOrigin]
-      : ["*"];
+      ? [allowedOrigin]  // Production: only the configured domain
+      : ["*"];           // Development: allow all (no domain configured)
     // Spread into each Lambda's environment when allowedOrigin is set
     const corsEnv: { [key: string]: string } = allowedOrigin
       ? { ALLOWED_ORIGIN: allowedOrigin }
@@ -378,7 +377,7 @@ export class ApiGatewayStack extends cdk.Stack {
       deployOptions: {
         stageName: "prod", // Production stage
         loggingLevel: apigateway.MethodLoggingLevel.ERROR, // Log errors only
-        dataTraceEnabled: true, // Enable request/response logging
+        dataTraceEnabled: false, // Disable full request/response body logging for data protection
         metricsEnabled: true, // Enable CloudWatch metrics
         accessLogDestination: new apigateway.LogGroupLogDestination(
           accessLogGroup,
@@ -1079,11 +1078,11 @@ export class ApiGatewayStack extends cdk.Stack {
 
     const defaultBedrockModelOptions = [
       {
-        label: "Claude 3 Sonnet",
-        value: "anthropic.claude-3-sonnet-20240229-v1:0",
+        label: "Claude Sonnet 4.6",
+        value: `arn:aws:bedrock:${this.region}:${this.account}:inference-profile/us.anthropic.claude-sonnet-4-6-20250514-v1:0`,
         constraints: {
-          maxOutputTokens: 2048,
-          defaultMaxOutputTokens: 1500,
+          maxOutputTokens: 8192,
+          defaultMaxOutputTokens: 4096,
           temperatureRange: [0, 1.0],
           topPRange: [0, 1.0],
         },
@@ -1123,7 +1122,7 @@ export class ApiGatewayStack extends cdk.Stack {
       {
         parameterName: `/${id}/LAIGO/BedrockLLMId`,
         description: "Parameter containing the Bedrock LLM ID",
-        stringValue: "meta.llama3-70b-instruct-v1:0",
+        stringValue: `arn:aws:bedrock:${this.region}:${this.account}:inference-profile/us.anthropic.claude-sonnet-4-6-20250514-v1:0`,
       },
     );
 
@@ -1133,7 +1132,7 @@ export class ApiGatewayStack extends cdk.Stack {
       {
         parameterName: `/${id}/LAIGO/BedrockModelOptions`,
         description: "JSON array of selectable Bedrock model options for admin UIs",
-        stringValue: JSON.stringify(defaultBedrockModelOptions),
+        stringValue: Fn.toJsonString(defaultBedrockModelOptions),
       },
     );
 
@@ -1627,7 +1626,10 @@ export class ApiGatewayStack extends cdk.Stack {
     const bedrockPolicyStatement = new iam.PolicyStatement({
       effect: iam.Effect.ALLOW,
       actions: ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
-      resources: [`arn:aws:bedrock:${this.region}::foundation-model/*`],
+      resources: [
+        `arn:aws:bedrock:${this.region}::foundation-model/*`,
+        "arn:aws:bedrock:*::inference-profile/*",
+      ],
     });
 
     const caseGenLambdaDockerFunc = new lambda.Function(
@@ -1719,7 +1721,7 @@ export class ApiGatewayStack extends cdk.Stack {
         functionName: `${id}-TextGenLambdaDockerFunction`,
         tracing: lambda.Tracing.ACTIVE,
         environment: {
-          SM_DB_CREDENTIALS: db.secretPathAdmin.secretName,
+          SM_DB_CREDENTIALS: db.secretPathUser.secretName,
           RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint,
           REGION: this.region,
           BEDROCK_LLM_PARAM: bedrockLLMParameter.parameterName,
@@ -1764,7 +1766,7 @@ export class ApiGatewayStack extends cdk.Stack {
     chatHistoryTable.grantReadWriteData(textGenLambdaDockerFunc);
 
     // Grant access to specific database secret
-    db.secretPathAdmin.grantRead(textGenLambdaDockerFunc);
+    db.secretPathUser.grantRead(textGenLambdaDockerFunc);
 
     // Grant access to DynamoDB actions
     // ListTables requires wildcard resource
@@ -2324,6 +2326,10 @@ export class ApiGatewayStack extends cdk.Stack {
       webSocketApi: this.wsApi,
       stageName: "prod",
       autoDeploy: true,
+      throttle: {
+        rateLimit: 10,   // 10 requests/second per connection
+        burstLimit: 20,  // 20 burst capacity
+      },
     });
 
     // Grant TextGen Lambda permission to post messages back to WebSocket connections
