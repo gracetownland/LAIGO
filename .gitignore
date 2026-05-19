@@ -1,2 +1,14 @@
 .kiro/*
 .agent/*
+docs/*
+node_modules/
+cdk.out/
+dist/
+build/
+coverage/
+
+.env
+*.pem
+*.key
+
+.aws/
