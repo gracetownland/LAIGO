@@ -13,8 +13,17 @@
     - [Enable Models in Bedrock](#enable-models-in-bedrock)
   - [Deployment](#deployment)
     - [Step 1: Fork \& Clone The Repository](#step-1-fork--clone-the-repository)
+      - [Install Dependencies](#install-dependencies)
     - [Step 2: Upload Secrets](#step-2-upload-secrets)
+      - [1) GitHub token secret (required by Amplify + CodePipeline)](#1-github-token-secret-required-by-amplify--codepipeline)
+      - [2) GitHub owner SSM parameter (required by Amplify + CodePipeline)](#2-github-owner-ssm-parameter-required-by-amplify--codepipeline)
+      - [3) Database bootstrap secret (required by Database stack)](#3-database-bootstrap-secret-required-by-database-stack)
+      - [4) Allowed signup domains (required by Cognito pre-signup Lambda)](#4-allowed-signup-domains-required-by-cognito-pre-signup-lambda)
     - [Step 3: CDK Deployment](#step-3-cdk-deployment)
+      - [3.1 Download requirements](#31-download-requirements)
+      - [3.2 Initialize the CDK stack (only if needed)](#32-initialize-the-cdk-stack-only-if-needed)
+      - [3.3 Choose your deployment options](#33-choose-your-deployment-options)
+      - [3.4 Deploy CDK stacks](#34-deploy-cdk-stacks)
   - [Post-Deployment](#post-deployment)
     - [Step 1: Verify Bedrock Model Access](#step-1-verify-bedrock-model-access)
     - [Step 2: Request SES Production Access (if using SesVerifiedDomain)](#step-2-request-ses-production-access-if-using-sesverifieddomain)
@@ -420,7 +429,7 @@ The stack prefix is added to physical resource names. `Environment` specifies th
 Uses the default Amplify domain, wildcard CORS, and Cognito's built-in email service. Good for development, testing, or small deployments.
 
 ```bash
-npx cdk deploy --all \
+npx cdk deploy --all
     --context StackPrefix=<YOUR-STACK-PREFIX> \
     --context Environment=dev \
     --context Version=1.2.0 \

@@ -150,9 +150,15 @@ def connect_to_db():
     global connection
     if connection is None or connection.closed:
         secret = get_secret(DB_SECRET_NAME)
-        conn_str = f"host={RDS_PROXY_ENDPOINT} dbname={secret['dbname']} user={secret['username']} password={secret['password']} port={secret['port']}"
         try:
-            connection = psycopg.connect(conn_str)
+            connection = psycopg.connect(
+                dbname=secret["dbname"],
+                user=secret["username"],
+                password=secret["password"],
+                host=RDS_PROXY_ENDPOINT,
+                port=secret["port"],
+                sslmode="require",
+            )
             logger.info("Connected to RDS via proxy")
         except Exception as e:
             logger.error(f"Database connection error: {e}")
@@ -356,7 +362,7 @@ def handler(event, context):
         try:
             conn = connect_to_db()
             conn.rollback()
-        except:
+        except Exception:
             pass
         return create_response(500, {'error': 'Internal server error'}, event)
 

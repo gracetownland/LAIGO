@@ -36,7 +36,7 @@ async function initializeConnection(SM_DB_CREDENTIALS, RDS_PROXY_ENDPOINT) {
       username: credentials.username,
       password: credentials.password,
       database: credentials.dbname,
-      ssl: { rejectUnauthorized: false }, // Allow self-signed certificates
+      ssl: "require", // Require SSL/TLS via RDS Proxy (certificate validated by AWS)
     };
 
     // Create PostgreSQL connection and store globally for reuse

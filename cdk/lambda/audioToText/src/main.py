@@ -105,17 +105,15 @@ def connect_to_db():
     global connection
     if connection is None or connection.closed:
         secret = get_secret(DB_SECRET_NAME)
-        params = {
-            'dbname': secret['dbname'],
-            'user': secret['username'],
-            'password': secret['password'],
-            'host': RDS_PROXY_ENDPOINT,
-            'port': secret['port']
-        }
-        # Build connection string for psycopg2
-        conn_str = " ".join(f"{k}={v}" for k, v in params.items())
         try:
-            connection = psycopg.connect(conn_str)
+            connection = psycopg.connect(
+                dbname=secret['dbname'],
+                user=secret['username'],
+                password=secret['password'],
+                host=RDS_PROXY_ENDPOINT,
+                port=secret['port'],
+                sslmode="require",
+            )
             logger.info("Connected to the database.")
         except Exception as e:
             logger.error(f"Database connection failed: {e}")

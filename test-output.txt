@@ -1,0 +1,201 @@
+  console.log
+    Deploying with new VPC. No need to add private subnet CIDR ranges to inbound rules of RDS.
+
+      at new DatabaseStack (lib/database-stack.ts:167:15)
+
+  console.log
+    Deploying with new VPC. No need to add private subnet CIDR ranges to inbound rules of RDS.
+
+      at new DatabaseStack (lib/database-stack.ts:167:15)
+
+  console.log
+    Deploying with new VPC. No need to add private subnet CIDR ranges to inbound rules of RDS.
+
+      at new DatabaseStack (lib/database-stack.ts:167:15)
+
+  console.log
+    Deploying with new VPC. No need to add private subnet CIDR ranges to inbound rules of RDS.
+
+      at new DatabaseStack (lib/database-stack.ts:167:15)
+
+  console.log
+    Deploying with new VPC. No need to add private subnet CIDR ranges to inbound rules of RDS.
+
+      at new DatabaseStack (lib/database-stack.ts:167:15)
+
+  console.log
+    Deploying with new VPC. No need to add private subnet CIDR ranges to inbound rules of RDS.
+
+      at new DatabaseStack (lib/database-stack.ts:167:15)
+
+FAIL test/security-hardening.test.ts (164.379 s)
+  Security Hardening - Migration Lambda TLS (Requirement 1)
+    ✕ NODE_TLS_REJECT_UNAUTHORIZED is absent from Migration Lambda environment (231 ms)
+    ✕ NODE_EXTRA_CA_CERTS is present in Migration Lambda environment (340 ms)
+  Security Hardening - TextGen Lambda Least Privilege (Requirement 2)
+    ✕ TextGen Lambda SM_DB_CREDENTIALS references secretPathUser (5 ms)
+  Security Hardening - API Gateway Data Trace Disabled (Requirement 4)
+    ✓ dataTraceEnabled is false in API Gateway stage (55 ms)
+  Security Hardening - S3 CORS Origins (Requirement 5)
+    ✕ S3 CORS origins exclude localhost when domainName is provided (2803 ms)
+    ✓ S3 CORS origins allow all when no domainName is provided (2032 ms)
+  Security Hardening - WebSocket Stage Throttling (Requirement 8)
+    ✕ WebSocket stage has throttle settings (rate=10, burst=20) (5 ms)
+
+  ● Security Hardening - Migration Lambda TLS (Requirement 1) › NODE_TLS_REJECT_UNAUTHORIZED is absent from Migration Lambda environment
+
+    expect(received).not.toHaveProperty(path)
+
+    Expected path: not "NODE_TLS_REJECT_UNAUTHORIZED"
+
+    Received value: "0"
+
+       98 |       const env = (resource as any).Properties?.Environment?.Variables;
+       99 |       if (env) {
+    > 100 |         expect(env).not.toHaveProperty("NODE_TLS_REJECT_UNAUTHORIZED");
+          |                         ^
+      101 |       }
+      102 |     }
+      103 |   });
+
+      at Object.<anonymous> (test/security-hardening.test.ts:100:25)
+
+  ● Security Hardening - Migration Lambda TLS (Requirement 1) › NODE_EXTRA_CA_CERTS is present in Migration Lambda environment
+
+    Expected value   undefined
+    Received:
+      undefined
+
+    Message:
+      Template has 2 resources with type AWS::Lambda::Function, but none match as expected.
+    The 2 closest matches:
+    AWSCDKTriggerCustomResourceProviderCustomResourceProviderHandler97BECD91 :: {
+      "DependsOn": [ "AWSCDKTriggerCustomResourceProviderCustomResourceProviderRoleE18FAF0A" ],
+      "Properties": {
+        "Code": { ... },
+    !!   Missing key 'Environment'
+        "Environment": undefined,
+        "Handler": "__entrypoint__.handler",
+        "MemorySize": 128,
+        "Role": { "Fn::GetAtt": [ "AWSCDKTriggerCustomResourceProviderCustomResourceProviderRoleE18FAF0A", "Arn" ] },
+        "Runtime": "nodejs22.x",
+        "Timeout": 900
+      },
+      "Type": "AWS::Lambda::Function"
+    }
+    TestDBFlowtriggerLambdaF81306C5 :: {
+      "DependsOn": [ "TestDBFlowlambdavpcroleDefaultPolicyB7B46468", "TestDBFlowlambdavpcrole105307E6" ],
+      "Properties": {
+        "Code": { ... },
+        "Description": "Database initializer and migration runner - 2026-05-15T17:42:17.198Z",
+        "Environment": {
+          "Variables": {
+            "DB_SECRET_NAME": "TestDb-LAIGO/credentials/rdsDbCredential",
+            "DB_TABLE_CREATOR_SECRET_NAME": { "Fn::Join": [ ... ] },
+            "DB_USER_SECRET_NAME": { "Fn::Join": [ ... ] },
+    !!       Missing key 'NODE_EXTRA_CA_CERTS'
+            "NODE_EXTRA_CA_CERTS": undefined,
+            "NODE_TLS_REJECT_UNAUTHORIZED": "0"
+          }
+        },
+        "FunctionName": "TestDBFlow-initializerFunction",
+        "Handler": "index.handler",
+        "Layers": [ { "Ref": "nodePgMigrateLayer888D6B90" } ],
+        "MemorySize": 512,
+        "Role": { "Fn::GetAtt": [ "TestDBFlowlambdavpcrole105307E6", "Arn" ] },
+        "Runtime": "nodejs22.x",
+        "Timeout": 300,
+        "VpcConfig": { ... }
+      },
+      "Type": "AWS::Lambda::Function"
+    }
+
+    Difference:
+
+    Compared values have no visual difference.
+
+      104 |
+      105 |   test("NODE_EXTRA_CA_CERTS is present in Migration Lambda environment", () => {
+    > 106 |     template.hasResourceProperties("AWS::Lambda::Function", {
+          |              ^
+      107 |       Environment: {
+      108 |         Variables: Match.objectLike({
+      109 |           NODE_EXTRA_CA_CERTS: "/opt/rds-ca/global-bundle.pem",
+
+      at Template.hasResourceProperties (node_modules/aws-cdk-lib/assertions/lib/template.js:1:3303)
+      at Object.<anonymous> (test/security-hardening.test.ts:106:14)
+
+  ● Security Hardening - TextGen Lambda Least Privilege (Requirement 2) › TextGen Lambda SM_DB_CREDENTIALS references secretPathUser
+
+    expect(received).toContain(expected) // indexOf
+
+    Expected substring: "userCredentials"
+    Received string:    "TestDb-LAIGO/credentials/rdsDbCredential"
+
+      139 |     // It could be a Ref or a string - check it references the user secret
+      140 |     if (typeof secretRef === "string") {
+    > 141 |       expect(secretRef).toContain("userCredentials");
+          |                         ^
+      142 |     } else {
+      143 |       // If it's a CloudFormation intrinsic (Ref or Fn::*), verify it doesn't reference admin
+      144 |       // The user secret is created in the DB stack, so it will be an import
+
+      at Object.<anonymous> (test/security-hardening.test.ts:141:25)
+
+  ● Security Hardening - S3 CORS Origins (Requirement 5) › S3 CORS origins exclude localhost when domainName is provided
+
+    expect(received).not.toContain(expected) // indexOf
+
+    Expected value: not "http://localhost:5173"
+    Received array:     ["https://app.example.com", "http://localhost:5173"]
+
+      181 |           if (rule.AllowedOrigins) {
+      182 |             // Should NOT contain localhost
+    > 183 |             expect(rule.AllowedOrigins).not.toContain("http://localhost:5173");
+          |                                             ^
+      184 |             // Should contain only the production domain
+      185 |             expect(rule.AllowedOrigins).toContain("https://app.example.com");
+      186 |           }
+
+      at Object.<anonymous> (test/security-hardening.test.ts:183:45)
+
+  ● Security Hardening - WebSocket Stage Throttling (Requirement 8) › WebSocket stage has throttle settings (rate=10, burst=20)
+
+    Expected value   undefined
+    Received:
+      undefined
+
+    Message:
+      Template has 1 resources with type AWS::ApiGatewayV2::Stage, but none match as expected.
+    The 1 closest matches:
+    TestApiStackWsStage28CB75BD :: {
+      "Properties": {
+        "ApiId": { "Ref": "TestApiStackChatWebSocketApiD506F9FB" },
+        "AutoDeploy": true,
+    !!   Missing key 'DefaultRouteSettings'
+        "DefaultRouteSettings": undefined,
+        "StageName": "prod"
+      },
+      "Type": "AWS::ApiGatewayV2::Stage"
+    }
+
+    Difference:
+
+    Compared values have no visual difference.
+
+      220 |
+      221 |   test("WebSocket stage has throttle settings (rate=10, burst=20)", () => {
+    > 222 |     template.hasResourceProperties("AWS::ApiGatewayV2::Stage", {
+          |              ^
+      223 |       StageName: "prod",
+      224 |       DefaultRouteSettings: Match.objectLike({
+      225 |         ThrottlingRateLimit: 10,
+
+      at Template.hasResourceProperties (node_modules/aws-cdk-lib/assertions/lib/template.js:1:3303)
+      at Object.<anonymous> (test/security-hardening.test.ts:222:14)
+
+Test Suites: 1 failed, 1 total
+Tests:       5 failed, 2 passed, 7 total
+Snapshots:   0 total
+Time:        172.277 s, estimated 239 s
+Ran all test suites matching /security-hardening/i.
