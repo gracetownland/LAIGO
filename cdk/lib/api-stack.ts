@@ -1079,11 +1079,11 @@ export class ApiGatewayStack extends cdk.Stack {
 
     const defaultBedrockModelOptions = [
       {
-        label: "Claude 3 Sonnet",
-        value: "anthropic.claude-3-sonnet-20240229-v1:0",
+        label: "Claude Sonnet 4.6",
+        value: `arn:aws:bedrock:${this.region}:${this.account}:inference-profile/us.anthropic.claude-sonnet-4-6-20250514-v1:0`,
         constraints: {
-          maxOutputTokens: 2048,
-          defaultMaxOutputTokens: 1500,
+          maxOutputTokens: 8192,
+          defaultMaxOutputTokens: 4096,
           temperatureRange: [0, 1.0],
           topPRange: [0, 1.0],
         },
@@ -1627,7 +1627,10 @@ export class ApiGatewayStack extends cdk.Stack {
     const bedrockPolicyStatement = new iam.PolicyStatement({
       effect: iam.Effect.ALLOW,
       actions: ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
-      resources: [`arn:aws:bedrock:${this.region}::foundation-model/*`],
+      resources: [
+        `arn:aws:bedrock:${this.region}::foundation-model/*`,
+        `arn:aws:bedrock:*::inference-profile/*`,
+      ],
     });
 
     const caseGenLambdaDockerFunc = new lambda.Function(
