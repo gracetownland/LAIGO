@@ -31,15 +31,24 @@ const secretsManager = new SecretsManagerClient();
 // Environment variables for IDP configuration
 let { SM_IDP_CREDENTIALS } = process.env;
 
-// IAM policy response structure returned to API Gateway
-const responseStruct = {
-  principalId: "yyyyyyyy", // User identifier from database (replaced with actual userId)
-  policyDocument: {
-    Version: "2012-10-17",
-    Statement: [], // IAM policy statements (Allow/Deny)
-  },
-  context: {}, // Additional context passed to backend Lambda functions
-};
+// IAM policy response structure — built fresh per invocation to avoid
+// Statement array accumulation across warm Lambda invocations.
+function buildAuthResponse(principalId, effect, resource, context) {
+  return {
+    principalId,
+    policyDocument: {
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Action: "execute-api:Invoke",
+          Effect: effect,
+          Resource: resource,
+        },
+      ],
+    },
+    context: context || {},
+  };
+}
 
 // JWT verifier instance (initialized once during cold start for performance)
 // Caches JWKS (JSON Web Key Set) to avoid fetching on every invocation
@@ -228,23 +237,14 @@ exports.handler = async (event) => {
     // This allows the authorizer to be cached while ensuring the policy doesn't leak access to other roles.
     const resource = parts.slice(0, 2).join("/") + "/*/student/*";
 
-    // Build IAM policy allowing access
-    responseStruct["principalId"] = user.user_id; // Database user identifier
-    responseStruct["policyDocument"]["Statement"].push({
-      Action: "execute-api:Invoke",
-      Effect: "Allow",
-      Resource: resource,
-    });
-    // Pass userId and user metadata to backend Lambda functions via context
-    responseStruct["context"] = {
+    // Build fresh IAM policy per invocation (no shared mutable state)
+    return buildAuthResponse(user.user_id, "Allow", resource, {
       userId: user.user_id,
       email: user.email,
       firstName: user.first_name || "",
       lastName: user.last_name || "",
       roles: JSON.stringify(user.roles), // API Gateway requires string values
-    };
-
-    return responseStruct;
+    });
   } catch (error) {
     logger.error("Authorization error", error);
     // API Gateway requires exact "Unauthorized" message for 401 response

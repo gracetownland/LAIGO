@@ -835,14 +835,14 @@ const routes = {
       if (activityData.length > 0) {
         let activity_counter = parseInt(activityData[0].activity_counter, 10);
         const last_activity = activityData[0].last_activity;
-        if (activity_counter > 0) {
-          const currentTime = new Date();
-          const lastActivityTime = new Date(last_activity);
-          const timeDifference = Math.abs(currentTime - lastActivityTime);
-          const hoursDifference = Math.floor(timeDifference / (1000 * 60 * 60));
+        if (activity_counter > 0 && last_activity) {
+          // Use UTC calendar day comparison (aligned with Python usage.py)
+          const now = new Date();
+          const lastActivityDate = new Date(last_activity);
+          const todayUTC = now.toISOString().slice(0, 10); // "YYYY-MM-DD"
+          const lastUTC = lastActivityDate.toISOString().slice(0, 10);
 
-          // Check if 24 hours have passed since the last activity
-          if (hoursDifference >= 24) {
+          if (todayUTC !== lastUTC) {
             await sqlConnection`
                   UPDATE "users" SET activity_counter = 0 WHERE user_id = ${user_id};
                 `;
@@ -869,21 +869,24 @@ const routes = {
 
       if (activityData.length > 0) {
         let activity_counter = parseInt(activityData[0].activity_counter, 10);
-        const last_activity = new Date(activityData[0].last_activity);
+        const last_activity = activityData[0].last_activity;
         const now = new Date();
-        const hoursSinceLast = (now - last_activity) / (1000 * 60 * 60);
 
-        if (hoursSinceLast >= 24) {
-          // Reset counter and last_activity
+        // Use UTC calendar day comparison (aligned with Python usage.py)
+        const todayUTC = now.toISOString().slice(0, 10); // "YYYY-MM-DD"
+        const lastUTC = last_activity ? new Date(last_activity).toISOString().slice(0, 10) : "";
+
+        if (todayUTC !== lastUTC) {
+          // New UTC day — reset counter
           await sqlConnection`
                 UPDATE "users" SET activity_counter = 1, last_activity = CURRENT_TIMESTAMP WHERE user_id = ${user_id};
               `;
           activity_counter = 1;
           // HARDCODED TO 10 RIGHT NOW, CHANGE TO BE FROM SECRETS MANAGER OR PARAM STORE
         } else if (activity_counter < 10) {
-          // Increment counter
+          // Same UTC day, under limit — increment
           await sqlConnection`
-                UPDATE "users" SET activity_counter = activity_counter + 1 WHERE user_id = ${user_id};
+                UPDATE "users" SET activity_counter = activity_counter + 1, last_activity = CURRENT_TIMESTAMP WHERE user_id = ${user_id};
               `;
           activity_counter += 1;
         } else {

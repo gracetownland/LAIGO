@@ -1722,7 +1722,7 @@ export class ApiGatewayStack extends cdk.Stack {
         functionName: `${id}-TextGenLambdaDockerFunction`,
         tracing: lambda.Tracing.ACTIVE,
         environment: {
-          SM_DB_CREDENTIALS: db.secretPathAdmin.secretName,
+          SM_DB_CREDENTIALS: db.secretPathUser.secretName,
           RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint,
           REGION: this.region,
           BEDROCK_LLM_PARAM: bedrockLLMParameter.parameterName,
@@ -1766,8 +1766,8 @@ export class ApiGatewayStack extends cdk.Stack {
     // Grant access to chat history table
     chatHistoryTable.grantReadWriteData(textGenLambdaDockerFunc);
 
-    // Grant access to specific database secret
-    db.secretPathAdmin.grantRead(textGenLambdaDockerFunc);
+    // Grant access to specific database secret (least-privilege: app user only)
+    db.secretPathUser.grantRead(textGenLambdaDockerFunc);
 
     // Grant access to DynamoDB actions
     // ListTables requires wildcard resource

@@ -485,8 +485,23 @@ def handler(event, context):
                          return create_response(429, {"error": error_message}, event)
             except Exception as e:
                 logger.error(f"Error checking message limit: {e}")
-                # Log error but allow request to proceed if usage check fails (fail open)
-                pass
+                # Fail closed: deny request if usage check fails (prevents bypass during DB outages)
+                error_message = "Service temporarily unavailable. Please try again later."
+                if is_websocket and connection_id:
+                    try:
+                        websocket_endpoint = os.environ.get("WEBSOCKET_API_ENDPOINT")
+                        if not websocket_endpoint:
+                            websocket_endpoint = f"https://{domain_name}/{stage}"
+                        apigw_client = boto3.client('apigatewaymanagementapi', endpoint_url=websocket_endpoint)
+                        apigw_client.post_to_connection(
+                            ConnectionId=connection_id,
+                            Data=json.dumps({"type": "error", "requestId": request_id, "content": error_message}).encode('utf-8')
+                        )
+                    except Exception as ws_error:
+                        logger.error(f"Failed to send rate limit error to WebSocket: {ws_error}")
+                    return {"statusCode": 503}
+                else:
+                    return create_response(503, {"error": error_message}, event)
 
         # Request Processing
         if is_websocket and connection_id:

@@ -6,7 +6,8 @@ logger = logging.getLogger()
 
 def check_and_increment_usage(connection, user_id):
     """
-    Checks and increments the daily message usage for a user.
+    Atomically checks and increments the daily message usage for a user.
+    Uses UPDATE ... RETURNING to prevent race conditions from concurrent requests.
     Returns the current usage count for today.
     """
     if connection is None:
@@ -15,47 +16,37 @@ def check_and_increment_usage(connection, user_id):
 
     try:
         cur = connection.cursor()
-        
-        # Check current usage
-        cur.execute("""
-            SELECT activity_counter, last_activity
-            FROM "users"
-            WHERE user_id = %s
-        """, (user_id,))
-        
-        result = cur.fetchone()
-        
-        if not result:
-            logger.error(f"User not found: {user_id}")
-            raise ValueError(f"User not found: {user_id}")
-            
-        activity_counter = result[0] or 0
-        last_activity = result[1]
-        
         current_time = datetime.now(timezone.utc)
-        
-        # If last_activity is None or from a different day, reset counter
-        # We compare dates in UTC
-        if last_activity is None or last_activity.date() != current_time.date():
-            logger.info(f"Resetting usage for user {user_id}. Last activity: {last_activity}, Today: {current_time.date()}")
-            new_count = 1
-        else:
-            new_count = activity_counter + 1
-            
-        # Update user record
+        today = current_time.date()
+
+        # Atomic operation: reset counter if new UTC day, otherwise increment.
+        # Uses a single UPDATE ... RETURNING to prevent TOCTOU race conditions.
         cur.execute("""
             UPDATE "users"
-            SET activity_counter = %s,
-                last_activity = %s
+            SET activity_counter = CASE
+                WHEN last_activity IS NULL OR (last_activity AT TIME ZONE 'UTC')::date < %s::date
+                THEN 1
+                ELSE activity_counter + 1
+            END,
+            last_activity = %s
             WHERE user_id = %s
-        """, (new_count, current_time, user_id))
-        
+            RETURNING activity_counter
+        """, (today, current_time, user_id))
+
+        result = cur.fetchone()
+
+        if not result:
+            cur.close()
+            logger.error(f"User not found: {user_id}")
+            raise ValueError(f"User not found: {user_id}")
+
+        new_count = result[0]
         connection.commit()
         cur.close()
-        
+
         logger.info(f"Updated usage for user {user_id}: {new_count}")
         return new_count
-        
+
     except Exception as e:
         logger.error(f"Error checking/incrementing usage: {e}")
         if connection:

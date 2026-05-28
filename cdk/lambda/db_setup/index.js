@@ -133,28 +133,34 @@ async function createAppUsers(
     ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE ON SEQUENCES TO readwrite;
     ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE ON SEQUENCES TO tablecreator;
 
+    GRANT readwrite TO ${RW_NAME};
+    GRANT tablecreator TO ${TC_NAME};
+  `;
+
+  // Create/update users with parameterized passwords to prevent SQL injection.
+  // Passwords are passed as $1 parameters, never interpolated into SQL strings.
+  const createOrUpdateUserSql = `
     DO $$
     BEGIN
       IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${RW_NAME}') THEN
-        EXECUTE format('CREATE USER ${RW_NAME} WITH PASSWORD %L', '${rwPass}');
+        EXECUTE format('CREATE USER ${RW_NAME} WITH PASSWORD %L', $1);
       ELSE
-        EXECUTE format('ALTER USER ${RW_NAME} WITH PASSWORD %L', '${rwPass}');
+        EXECUTE format('ALTER USER ${RW_NAME} WITH PASSWORD %L', $1);
       END IF;
 
       IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${TC_NAME}') THEN
-        EXECUTE format('CREATE USER ${TC_NAME} WITH PASSWORD %L', '${tcPass}');
+        EXECUTE format('CREATE USER ${TC_NAME} WITH PASSWORD %L', $2);
       ELSE
-        EXECUTE format('ALTER USER ${TC_NAME} WITH PASSWORD %L', '${tcPass}');
+        EXECUTE format('ALTER USER ${TC_NAME} WITH PASSWORD %L', $2);
       END IF;
     END$$;
-
-    GRANT readwrite TO ${RW_NAME};
-    GRANT tablecreator TO ${TC_NAME};
   `;
 
   await adminClient.query("BEGIN");
   try {
     await adminClient.query(sql);
+    // Create/update users with parameterized passwords (S-M6 fix)
+    await adminClient.query(createOrUpdateUserSql, [rwPass, tcPass]);
     await adminClient.query("COMMIT");
   } catch (e) {
     await adminClient.query("ROLLBACK");
