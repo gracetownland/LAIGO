@@ -1,2 +1,69 @@
 .kiro/*
 .agent/*
+
+# Dependencies
+node_modules/
+docs/code-reviews
+# CDK output
+cdk.out/
+
+# CDK source (infrastructure-as-code)
+cdk/bin/
+cdk/lib/
+cdk/test/
+cdk/node_modules
+cdk/package.json
+cdk/package-lock.json
+cdk/cdk.json
+cdk/tsconfig.json
+cdk/README.md
+
+frontend/node_modules
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment files / secrets
+.env
+.env.*
+!.env.example
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE/editor
+.vscode/
+.idea/
+
+# Build output
+dist/
+build/
+coverage/
+
+# Frontend source
+frontend/src/
+frontend/public/
+frontend/package.json
+frontend/package-lock.json
+frontend/index.html
+frontend/tsconfig.json
+frontend/tsconfig.app.json
+frontend/tsconfig.node.json
+frontend/vite.config.ts
+frontend/eslint.config.js
+frontend/README.md
+
+# TypeScript
+*.tsbuildinfo
+
+# Temporary files
+tmp/
+temp/
+
+# AWS credentials (never commit)
+.aws/
