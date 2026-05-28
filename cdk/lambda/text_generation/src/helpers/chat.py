@@ -1,10 +1,40 @@
-import boto3, re, time
+import boto3, re, time, logging
 from langchain_aws import ChatBedrockConverse
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_community.chat_message_histories import DynamoDBChatMessageHistory
 from pydantic import BaseModel, Field
+
+try:
+    from bedrock_client.sanitizer import sanitize_prompt_input
+except ImportError:
+    # Fallback: inline minimal sanitizer if layer is not attached
+    _logger = logging.getLogger(__name__)
+
+    def sanitize_prompt_input(user_input: str) -> tuple[str, bool]:
+        """Minimal inline sanitizer fallback."""
+        import re as _re
+        if not user_input:
+            return ("", False)
+        # Strip control chars
+        sanitized = _re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f\u200b-\u200f\u2028-\u2029\u202a-\u202e\u2060-\u2064\ufeff\ufff9-\ufffb]", "", user_input)
+        # Check for injection patterns
+        injection_patterns = [
+            r"(?i)\b(ignore|disregard|forget)\b.{0,30}\b(previous|above|prior|all)\b.{0,30}\b(instructions?|prompts?|rules?|context)\b",
+            r"(?i)\b(you are now|act as|pretend to be|assume the role|switch to|new role)\b",
+            r"(?i)\b(reveal|show|print|output|repeat|display)\b.{0,20}\b(system prompt|instructions|hidden|secret|internal)\b",
+            r"(?i)(```\s*(system|assistant|end|human)|<\/?system>|<\/?prompt>|\[INST\]|\[\/INST\]|<<SYS>>|<\/SYS>>)",
+            r"(?i)^\s*(system|assistant)\s*:",
+            r"(?i)\b(DAN|do anything now|jailbreak|bypass|override safety|ignore safety)\b",
+        ]
+        for pat in injection_patterns:
+            if _re.search(pat, sanitized):
+                _logger.warning("Prompt injection pattern detected in user input (first 100 chars): %.100s", sanitized)
+                return (sanitized, True)
+        return (sanitized, False)
+
+_chat_logger = logging.getLogger(__name__)
 
 class LLM_evaluation(BaseModel):
     response: str = Field(description="Assessment of the student's answer with a follow-up question.")
@@ -60,13 +90,23 @@ def get_initial_student_query(case_type: str, jurisdiction: str, case_descriptio
     Returns:
     str: The formatted initial query string for the student.
     """
+    # Sanitize user-provided case context before interpolation
+    case_type_clean, ct_flagged = sanitize_prompt_input(case_type or "")
+    jurisdiction_clean, j_flagged = sanitize_prompt_input(jurisdiction or "")
+    case_description_clean, cd_flagged = sanitize_prompt_input(case_description or "")
+
+    if ct_flagged or j_flagged or cd_flagged:
+        _chat_logger.warning(
+            "Prompt injection pattern detected in case context during initial query construction"
+        )
+
     student_query = f"""
     Greet me and ask if I'm ready to start talking about the case.
 
     Be prepared to answer questions about the case, with the following context (you do not need to say anything about the context in your response yet, just ingest it):
-    Case type: {case_type}
-    Jurisdiction: {jurisdiction}
-    Case description: {case_description}
+    Case type: {case_type_clean}
+    Jurisdiction: {jurisdiction_clean}
+    Case description: {case_description_clean}
     This is the end of the current context. Prepare to be asked about the case.
     """
     return student_query
@@ -83,18 +123,24 @@ def construct_case_context_prompt(system_prompt: str, case_context: dict) -> str
     Returns:
         str: The fully constructed system prompt with context.
     """
-    case_type = case_context.get("case_type", "")
-    jurisdiction = case_context.get("jurisdiction", "")
-    case_description = case_context.get("case_description", "")
-    province = case_context.get("province", "")
-    statute = case_context.get("statute", "")
+    # Sanitize all user-provided case context fields
+    case_type, ct_flag = sanitize_prompt_input(case_context.get("case_type", "") or "")
+    jurisdiction, j_flag = sanitize_prompt_input(case_context.get("jurisdiction", "") or "")
+    case_description, cd_flag = sanitize_prompt_input(case_context.get("case_description", "") or "")
+    province, p_flag = sanitize_prompt_input(case_context.get("province", "") or "")
+    statute, s_flag = sanitize_prompt_input(case_context.get("statute", "") or "")
+
+    if any([ct_flag, j_flag, cd_flag, p_flag, s_flag]):
+        _chat_logger.warning(
+            "Prompt injection pattern detected in case context during system prompt construction"
+        )
     
     return f"""
         Case Context:
         {system_prompt}
         Pay close attention to the latest system prompt I've given you, as it may have been updated since the last message, but don't entirely discard the previous system prompts unless they conflict. This is for your behaviour, you do not need to include it in the response.
 
-        Additional case detials that are relevant:
+        Additional case details that are relevant:
         Case type: {case_type}
         Jurisdiction: {jurisdiction}
         Case description: {case_description}

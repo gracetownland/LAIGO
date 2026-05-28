@@ -110,9 +110,11 @@ You must create a GitHub personal access token (classic) with the `repo` scope. 
 This project provisions Bedrock guardrails and invokes foundation models from Lambda. In Amazon Bedrock Model access, enable at least:
 
 - `meta.llama3-70b-instruct-v1:0`
-- `anthropic.claude-3-sonnet-20240229-v1:0`
+- `anthropic.claude-sonnet-4-6-20250514-v1:0` (accessed via cross-region inference profile)
 
 If either model is not enabled in the deployment region, model invocation calls will fail at runtime.
+
+> **Note:** Claude Sonnet 4.6 is invoked through a cross-region inference profile (`us.anthropic.claude-sonnet-4-6-20250514-v1:0`), which allows Bedrock to route requests across regions for improved availability. Ensure the model is enabled in at least one US region.
 
 ## Deployment
 
@@ -486,7 +488,7 @@ npx cdk deploy --all --context StackPrefix="LAIGO" --context Environment=dev --c
 Anthropic models on Bedrock may require a use-case request before access is granted. To check:
 
 1. In the AWS Console, navigate to Amazon Bedrock > Playgrounds > Chat playground.
-2. Select an Anthropic model (e.g. `Claude 3 Sonnet`) and try sending a message.
+2. Select an Anthropic model (e.g. `Claude Sonnet 4.6`) and try sending a message.
 3. If a use-case form appears, fill it out and submit. Wait approximately 15 minutes for approval before using the application.
 4. If you can chat with the model without any prompts, you may continue.
 

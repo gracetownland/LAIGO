@@ -1,11 +1,34 @@
 import logging
 import boto3
 import json
+import re
 from typing import Optional
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 bedrock_runtime = boto3.client("bedrock-runtime")
+
+try:
+    from bedrock_client.sanitizer import sanitize_prompt_input
+except ImportError:
+    def sanitize_prompt_input(user_input: str) -> tuple[str, bool]:
+        """Minimal inline sanitizer fallback."""
+        if not user_input:
+            return ("", False)
+        sanitized = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f\u200b-\u200f\u2028-\u2029\u202a-\u202e\u2060-\u2064\ufeff\ufff9-\ufffb]", "", user_input)
+        injection_patterns = [
+            r"(?i)\b(ignore|disregard|forget)\b.{0,30}\b(previous|above|prior|all)\b.{0,30}\b(instructions?|prompts?|rules?|context)\b",
+            r"(?i)\b(you are now|act as|pretend to be|assume the role|switch to|new role)\b",
+            r"(?i)\b(reveal|show|print|output|repeat|display)\b.{0,20}\b(system prompt|instructions|hidden|secret|internal)\b",
+            r"(?i)(```\s*(system|assistant|end|human)|<\/?system>|<\/?prompt>|\[INST\]|\[\/INST\]|<<SYS>>|<\/SYS>>)",
+            r"(?i)^\s*(system|assistant)\s*:",
+            r"(?i)\b(DAN|do anything now|jailbreak|bypass|override safety|ignore safety)\b",
+        ]
+        for pat in injection_patterns:
+            if re.search(pat, sanitized):
+                logger.warning("Prompt injection pattern detected in user input (first 100 chars): %.100s", sanitized)
+                return (sanitized, True)
+        return (sanitized, False)
 
 
 def _build_request_payload(model_id: str, prompt: str, temperature: float, max_tokens: int, top_p: Optional[float]) -> dict:
@@ -97,6 +120,15 @@ def get_response(
     """
     logger.info(f"Generating case title for case type: {case_type}")
     
+    # Sanitize user-provided inputs before interpolation into prompt
+    case_type_clean, ct_flag = sanitize_prompt_input(case_type or "")
+    jurisdiction_clean, j_flag = sanitize_prompt_input(jurisdiction or "") if jurisdiction else ("", False)
+    case_description_clean, cd_flag = sanitize_prompt_input(case_description or "") if case_description else ("", False)
+    province_clean, p_flag = sanitize_prompt_input(province or "") if province else ("", False)
+
+    if any([ct_flag, j_flag, cd_flag, p_flag]):
+        logger.warning("Prompt injection pattern detected in case context for title generation")
+
     # Construct a prompt to guide the LLM in creating a concise, professional case title
     prompt = (
         "You are a legal document title generator. Create a professional, concise case title. "
@@ -111,20 +143,20 @@ def get_response(
         "- Do not mention any country or region name in the title, do not format it as country vs person\n"
         "- Do not mention United States vs Defendant"
         "Do not mention anything like: Here is a professional and concise case title:, just return the title.\n"
-        f"Case Type: {case_type}\n"
+        f"Case Type: {case_type_clean}\n"
     )
     
     # Add jurisdiction to the prompt if provided
-    if jurisdiction:
-        prompt += f"Jurisdiction: {jurisdiction}\n"
+    if jurisdiction_clean:
+        prompt += f"Jurisdiction: {jurisdiction_clean}\n"
 
-    # Add case description to the prompt if provided
-    if province:
-        prompt += f"Province: {province}\n"
+    # Add province to the prompt if provided
+    if province_clean:
+        prompt += f"Province: {province_clean}\n"
     
     # Add case description to the prompt if provided
-    if case_description:
-        prompt += f"Case Description: {case_description}\n"
+    if case_description_clean:
+        prompt += f"Case Description: {case_description_clean}\n"
     
     # Add instruction to generate the title
     prompt += "\nGenerate the case title:"

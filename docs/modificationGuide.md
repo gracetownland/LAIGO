@@ -351,19 +351,21 @@ After making the required changes in the fork created in the [Deployment Guide](
   - Update the allowed Bedrock model permissions in `cdk/lib/api-stack.ts` so the application can invoke the model.
   - Update the frontend admin model option list so the model appears in the "AI Settings" page.
   - A list of the available Bedrock models and their IDs is listed [here](https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html).
-  - For example, if you are introducing Meta Llama 3 8B Instruct, update `bedrockPolicyStatement` so the application is allowed to invoke it:
+  - The `bedrockPolicyStatement` currently allows both foundation models and cross-region inference profiles:
 
   ```typescript
   const bedrockPolicyStatement = new iam.PolicyStatement({
     effect: iam.Effect.ALLOW,
     actions: ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
     resources: [
-      "arn:aws:bedrock:" +
-        this.region +
-        "::foundation-model/meta.llama3-8b-instruct-v1:0",
+      `arn:aws:bedrock:${this.region}::foundation-model/*`,
+      `arn:aws:bedrock:*::inference-profile/*`,
     ],
   });
   ```
+
+  - **Foundation models** (e.g., `meta.llama3-70b-instruct-v1:0`) use the `foundation-model` ARN pattern.
+  - **Cross-region inference profiles** (e.g., `us.anthropic.claude-sonnet-4-6-20250514-v1:0`) use the `inference-profile` ARN pattern and allow Bedrock to route requests across regions for improved availability.
 
   - After making these changes, redeploy the application by using the `cdk deploy` command in the deployment guide.
 
