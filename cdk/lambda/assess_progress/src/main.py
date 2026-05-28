@@ -428,42 +428,55 @@ def initialize_constants():
 
 def connect_to_db():
     global connection
-    if connection is None or connection.closed:
+    if connection is not None and not connection.closed:
+        # Health check: verify the existing connection is still usable
         try:
-            logger.info("Connecting to database with SSL/TLS...")
-            secret = get_secret(DB_SECRET_NAME)
-            connection_params = {
-                'dbname': secret["dbname"],
-                'user': secret["username"],
-                'password': secret["password"],
-                'host': RDS_PROXY_ENDPOINT,
-                'port': secret["port"],
-                'sslmode': 'require'  # Require SSL connection
-            }
-            connection_string = " ".join([f"{key}={value}" for key, value in connection_params.items()])
-            connection = psycopg.connect(connection_string)
-            logger.info("Successfully connected to database with SSL/TLS")
-        except psycopg.OperationalError as e:
-            logger.error(f"SSL/TLS connection failed: {e}")
-            logger.error(f"Connection details: host={RDS_PROXY_ENDPOINT}, port={secret['port']}, sslmode=require")
-            if 'SSL' in str(e) or 'certificate' in str(e).lower():
-                logger.error("SSL certificate validation failed. Verify RDS Proxy TLS configuration.")
-            if connection:
-                try:
-                    connection.rollback()
-                    connection.close()
-                except Exception as close_err:
-                    logger.error(f"Error closing connection after failure: {close_err}")
-            raise
+            with connection.cursor() as cur:
+                cur.execute("SELECT 1")
+            return connection
         except Exception as e:
-            logger.exception(f"Failed to connect to database: {e}")
-            if connection:
-                try:
-                    connection.rollback()
-                    connection.close()
-                except Exception as close_err:
-                    logger.error(f"Error closing connection after failure: {close_err}")
-            raise
+            logger.warning(f"Stale database connection detected, reconnecting: {e}")
+            try:
+                connection.close()
+            except Exception:
+                pass
+            connection = None
+
+    try:
+        logger.info("Connecting to database with SSL/TLS...")
+        secret = get_secret(DB_SECRET_NAME)
+        connection_params = {
+            'dbname': secret["dbname"],
+            'user': secret["username"],
+            'password': secret["password"],
+            'host': RDS_PROXY_ENDPOINT,
+            'port': secret["port"],
+            'sslmode': 'require'  # Require SSL connection
+        }
+        connection_string = " ".join([f"{key}={value}" for key, value in connection_params.items()])
+        connection = psycopg.connect(connection_string)
+        logger.info("Successfully connected to database with SSL/TLS")
+    except psycopg.OperationalError as e:
+        logger.error(f"SSL/TLS connection failed: {e}")
+        logger.error(f"Connection details: host={RDS_PROXY_ENDPOINT}, port={secret['port']}, sslmode=require")
+        if 'SSL' in str(e) or 'certificate' in str(e).lower():
+            logger.error("SSL certificate validation failed. Verify RDS Proxy TLS configuration.")
+        if connection:
+            try:
+                connection.close()
+            except Exception as close_err:
+                logger.error(f"Error closing connection after failure: {close_err}")
+        connection = None
+        raise
+    except Exception as e:
+        logger.exception(f"Failed to connect to database: {e}")
+        if connection:
+            try:
+                connection.close()
+            except Exception as close_err:
+                logger.error(f"Error closing connection after failure: {close_err}")
+        connection = None
+        raise
     return connection
 
 def get_assessment_prompt_template(block_type):

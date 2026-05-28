@@ -159,7 +159,7 @@ async function createAppUsers(
   await adminClient.query("BEGIN");
   try {
     await adminClient.query(sql);
-    // Create/update users with parameterized passwords (S-M6 fix)
+  
     await adminClient.query(createOrUpdateUserSql, [rwPass, tcPass]);
     await adminClient.query("COMMIT");
   } catch (e) {

@@ -148,15 +148,29 @@ def initialize_case_types():
 
 def connect_to_db():
     global connection
-    if connection is None or connection.closed:
-        secret = get_secret(DB_SECRET_NAME)
-        conn_str = f"host={RDS_PROXY_ENDPOINT} dbname={secret['dbname']} user={secret['username']} password={secret['password']} port={secret['port']}"
+    if connection is not None and not connection.closed:
+        # Health check: verify the existing connection is still usable
         try:
-            connection = psycopg.connect(conn_str)
-            logger.info("Connected to RDS via proxy")
+            with connection.cursor() as cur:
+                cur.execute("SELECT 1")
+            return connection
         except Exception as e:
-            logger.error(f"Database connection error: {e}")
-            raise
+            logger.warning(f"Stale database connection detected, reconnecting: {e}")
+            try:
+                connection.close()
+            except Exception:
+                pass
+            connection = None
+
+    secret = get_secret(DB_SECRET_NAME)
+    conn_str = f"host={RDS_PROXY_ENDPOINT} dbname={secret['dbname']} user={secret['username']} password={secret['password']} port={secret['port']}"
+    try:
+        connection = psycopg.connect(conn_str)
+        logger.info("Connected to RDS via proxy")
+    except Exception as e:
+        logger.error(f"Database connection error: {e}")
+        connection = None
+        raise
     return connection
 
 

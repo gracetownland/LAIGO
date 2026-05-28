@@ -5,17 +5,40 @@ const {
   SecretsManagerClient,
   GetSecretValueCommand,
 } = require("@aws-sdk/client-secrets-manager");
+const { Logger } = require("@aws-lambda-powertools/logger");
+const logger = new Logger({ serviceName: "HandlerConnection" });
 
 // Initialize Secrets Manager client for retrieving database credentials
 const secretsManager = new SecretsManagerClient();
 
 /**
- * Initialize PostgreSQL database connection using credentials from Secrets Manager
- * Creates a global connection object for reuse across Lambda invocations
+ * Initialize PostgreSQL database connection using credentials from Secrets Manager.
+ * Creates a global connection object for reuse across Lambda invocations.
+ * Includes connection health check to detect and recover from stale connections.
+ *
  * @param {string} SM_DB_CREDENTIALS - Secrets Manager secret name containing DB credentials
  * @param {string} RDS_PROXY_ENDPOINT - RDS Proxy endpoint for database connection
  */
 async function initializeConnection(SM_DB_CREDENTIALS, RDS_PROXY_ENDPOINT) {
+  // If connection already exists, verify it's still healthy
+  if (global.sqlConnection) {
+    try {
+      await global.sqlConnection`SELECT 1`;
+      return; // Connection is healthy, reuse it
+    } catch (error) {
+      logger.warn("Stale database connection detected, reconnecting...", {
+        error: error.message,
+      });
+      // Close the stale connection gracefully
+      try {
+        await global.sqlConnection.end({ timeout: 2 });
+      } catch (closeErr) {
+        // Ignore close errors on stale connections
+      }
+      global.sqlConnection = null;
+    }
+  }
+
   let credentials;
   try {
     // Retrieve database credentials from AWS Secrets Manager
@@ -27,33 +50,33 @@ async function initializeConnection(SM_DB_CREDENTIALS, RDS_PROXY_ENDPOINT) {
     // Parse JSON credentials from secret
     credentials = JSON.parse(secretResponse.SecretString);
 
-    console.log(`Connecting to database with user: ${credentials.username}`);
+    logger.info("Connecting to database", { username: credentials.username });
 
-    // Configure PostgreSQL connection parameters
-    const connectionConfig = {
-      host: RDS_PROXY_ENDPOINT, // Use RDS Proxy for connection pooling
-      port: credentials.port,
+    // Create PostgreSQL connection with pool configuration matching authorizer settings
+    global.sqlConnection = postgres({
+      host: RDS_PROXY_ENDPOINT,
+      port: credentials.port || 5432,
       username: credentials.username,
       password: credentials.password,
       database: credentials.dbname,
-      ssl: { rejectUnauthorized: false }, // Allow self-signed certificates
-    };
-
-    // Create PostgreSQL connection and store globally for reuse
-    global.sqlConnection = postgres(connectionConfig);
+      ssl: { rejectUnauthorized: false },
+      max: 1,              // Single connection per Lambda instance (Lambda is single-threaded)
+      idle_timeout: 20,    // Close idle connections after 20 seconds
+      connect_timeout: 10, // Timeout connection attempts after 10 seconds
+    });
 
     // Test connection with simple query
     await global.sqlConnection`SELECT 1`;
 
-    console.log("Database connection initialized and tested successfully");
+    logger.info("Database connection initialized and tested successfully");
   } catch (error) {
-    console.error("Error initializing database connection:", error);
-    // Avoid referencing 'credentials' if it failed to parse / fetch
-    console.error("Connection details:", {
+    logger.error("Error initializing database connection", {
       host: RDS_PROXY_ENDPOINT,
       username: credentials ? credentials.username : undefined,
       database: credentials ? credentials.dbname : undefined,
+      error: error.message,
     });
+    global.sqlConnection = null;
     throw new Error(`Failed to initialize database connection: ${error.message}`);
   }
 }
