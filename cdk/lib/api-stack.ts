@@ -1356,6 +1356,7 @@ export class ApiGatewayStack extends cdk.Stack {
         versioned: false,
         encryption: s3.BucketEncryption.S3_MANAGED,
         blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+        enforceSSL: true,
         cors: [
           {
             allowedHeaders: ["*"],
