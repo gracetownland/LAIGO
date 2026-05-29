@@ -690,6 +690,7 @@ export class ApiGatewayStack extends cdk.Stack {
         vpc: vpcStack.vpc, // VPC access for database connectivity
         vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
         securityGroups: [db.dbInstance.connections.securityGroups[0]],
+        tracing: lambda.Tracing.ACTIVE,
         environment: {
           SM_IDP_CREDENTIALS: this.secret.secretName, // IDP config from Secrets Manager (Cognito initially)
           SM_DB_CREDENTIALS: db.secretPathUser.secretName, // Database credentials
@@ -731,6 +732,7 @@ export class ApiGatewayStack extends cdk.Stack {
         vpc: vpcStack.vpc, // VPC access for database connectivity
         vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
         securityGroups: [db.dbInstance.connections.securityGroups[0]],
+        tracing: lambda.Tracing.ACTIVE,
         memorySize: 256,
         layers: [jwt, postgres, javascriptPowertoolsLayer], // JWT verification library + PostgreSQL client
         role: studentAuthorizerRole,
@@ -771,6 +773,7 @@ export class ApiGatewayStack extends cdk.Stack {
         vpc: vpcStack.vpc,
         vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
         securityGroups: [db.dbInstance.connections.securityGroups[0]],
+        tracing: lambda.Tracing.ACTIVE,
         memorySize: 256,
         layers: [jwt, postgres, javascriptPowertoolsLayer], // JWT verification library + PostgreSQL client
         role: instructorAuthorizerRole,
@@ -1040,42 +1043,6 @@ export class ApiGatewayStack extends cdk.Stack {
     );
 
     // Create guardrail for case generation (financial advice protection)
-    const caseGenGuardrail = new bedrock.CfnGuardrail(
-      this,
-      `${id}-CaseGenGuardrail`,
-      {
-        name: `${id}-comprehensive-guardrails`,
-        description: "Block financial advice",
-        blockedInputMessaging:
-          "Sorry, I cannot process inputs that appear to contain financial advice requests.",
-        blockedOutputsMessaging: "Sorry, I cannot provide financial advice.",
-        topicPolicyConfig: {
-          topicsConfig: [
-            {
-              name: "FinancialAdvice",
-              definition:
-                "Requests for financial advice, investment recommendations, or financial planning.",
-              examples: [
-                "Should I invest in stocks?",
-                "What's the best way to save money?",
-                "How should I manage my finances?",
-              ],
-              type: "DENY",
-            },
-          ],
-        },
-      },
-    );
-
-    // Create guardrail version for case generation
-    const caseGenGuardrailVersion = new bedrock.CfnGuardrailVersion(
-      this,
-      `${id}-CaseGenGuardrailVersion`,
-      {
-        guardrailIdentifier: caseGenGuardrail.attrGuardrailId,
-        description: "Initial version",
-      },
-    );
 
     const defaultBedrockModelOptions = [
       {
@@ -1359,13 +1326,10 @@ export class ApiGatewayStack extends cdk.Stack {
         enforceSSL: true,
         cors: [
           {
-            allowedHeaders: ["*"],
+            allowedHeaders: ["Content-Type", "Content-Length", "x-amz-*"],
             allowedMethods: [
-              s3.HttpMethods.GET,
               s3.HttpMethods.PUT,
               s3.HttpMethods.HEAD,
-              s3.HttpMethods.POST,
-              s3.HttpMethods.DELETE,
             ],
             allowedOrigins: s3CorsAllowedOrigins,
           },
@@ -1412,6 +1376,7 @@ export class ApiGatewayStack extends cdk.Stack {
         code: lambda.Code.fromAsset("lambda/handlers"),
         timeout: Duration.seconds(29),
         vpc: vpcStack.vpc,
+        tracing: lambda.Tracing.ACTIVE,
         environment: {
           SM_DB_CREDENTIALS: db.secretPathUser.secretName,
           RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint,
@@ -1467,6 +1432,7 @@ export class ApiGatewayStack extends cdk.Stack {
         handler: "adminFunction.handler",
         timeout: Duration.seconds(29),
         vpc: vpcStack.vpc,
+        tracing: lambda.Tracing.ACTIVE,
         environment: {
           SM_DB_CREDENTIALS: db.secretPathTableCreator.secretName,
           RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint,
@@ -1579,6 +1545,7 @@ export class ApiGatewayStack extends cdk.Stack {
         handler: "instructorFunction.handler",
         timeout: Duration.seconds(29),
         vpc: vpcStack.vpc,
+        tracing: lambda.Tracing.ACTIVE,
         environment: {
           SM_DB_CREDENTIALS: db.secretPathUser.secretName,
           RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint,
@@ -1629,8 +1596,14 @@ export class ApiGatewayStack extends cdk.Stack {
       effect: iam.Effect.ALLOW,
       actions: ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
       resources: [
-        `arn:aws:bedrock:${this.region}::foundation-model/*`,
-        `arn:aws:bedrock:*::inference-profile/*`,
+        // Anthropic Claude models (foundation models)
+        `arn:aws:bedrock:${this.region}::foundation-model/anthropic.*`,
+        // Meta Llama models (foundation models)
+        `arn:aws:bedrock:${this.region}::foundation-model/meta.*`,
+        // Cross-region inference profiles (Anthropic)
+        `arn:aws:bedrock:${this.region}:${this.account}:inference-profile/us.anthropic.*`,
+        // Cross-region inference profiles (Meta)
+        `arn:aws:bedrock:${this.region}:${this.account}:inference-profile/us.meta.*`,
       ],
     });
 
@@ -1922,6 +1895,15 @@ export class ApiGatewayStack extends cdk.Stack {
     playgroundTable.grantReadData(assessProgressFunction);
     assessProgressFunction.addToRolePolicy(bedrockPolicyStatement);
 
+    // Grant guardrail permissions to assessProgressFunction
+    assessProgressFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ["bedrock:InvokeGuardrail", "bedrock:ApplyGuardrail"],
+        resources: [textGenGuardrail.attrGuardrailArn],
+      }),
+    );
+
     assessProgressFunction.addToRolePolicy(
       new iam.PolicyStatement({
         actions: ["ssm:GetParameter"],
@@ -1946,13 +1928,11 @@ export class ApiGatewayStack extends cdk.Stack {
         blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
         cors: [
           {
-            allowedHeaders: ["*"],
+            allowedHeaders: ["Content-Type", "Content-Length", "x-amz-*"],
             allowedMethods: [
               s3.HttpMethods.GET,
               s3.HttpMethods.PUT,
               s3.HttpMethods.HEAD,
-              s3.HttpMethods.POST,
-              s3.HttpMethods.DELETE,
             ],
             allowedOrigins: s3CorsAllowedOrigins,
           },
@@ -1962,6 +1942,12 @@ export class ApiGatewayStack extends cdk.Stack {
         autoDeleteObjects: true,
         enforceSSL: true,
         encryption: s3.BucketEncryption.S3_MANAGED, // Explicit encryption at rest with AWS-managed keys
+        lifecycleRules: [
+          {
+            id: "cleanup-orphaned-audio",
+            expiration: cdk.Duration.days(7), // Safety net: audio should be processed within minutes
+          },
+        ],
       },
     );
     this.audioPromptBucketName = audioStorageBucket.bucketName;
@@ -1990,15 +1976,12 @@ export class ApiGatewayStack extends cdk.Stack {
       .defaultChild as lambda.CfnFunction;
     cfnGeneratePreSignedURL.overrideLogicalId("GeneratePreSignedURLFunc");
 
-    // Grant the Lambda function the necessary permissions
-    audioStorageBucket.grantReadWrite(generatePreSignedURL);
+    // Grant the Lambda function minimal permissions for pre-signed URL signing
     generatePreSignedURL.addToRolePolicy(
       new iam.PolicyStatement({
-        actions: ["s3:PutObject", "s3:GetObject"],
-        resources: [
-          audioStorageBucket.bucketArn,
-          `${audioStorageBucket.bucketArn}/*`,
-        ],
+        effect: iam.Effect.ALLOW,
+        actions: ["s3:PutObject"],
+        resources: [audioStorageBucket.arnForObjects("*")],
       }),
     );
 
@@ -2062,7 +2045,7 @@ export class ApiGatewayStack extends cdk.Stack {
           "s3:DeleteObject",
           "s3:HeadObject",
         ],
-        resources: [`arn:aws:s3:::${audioStorageBucket.bucketName}/*`],
+        resources: [audioStorageBucket.arnForObjects("*")],
       }),
     );
 
@@ -2167,6 +2150,15 @@ export class ApiGatewayStack extends cdk.Stack {
     // Grant access to Bedrock (using shared policy with specific model ARNs)
     summaryGenerationFunction.addToRolePolicy(bedrockPolicyStatement);
 
+    // Grant guardrail permissions to summaryGenerationFunction
+    summaryGenerationFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ["bedrock:InvokeGuardrail", "bedrock:ApplyGuardrail"],
+        resources: [textGenGuardrail.attrGuardrailArn],
+      }),
+    );
+
     // Grant EventBridge permissions for notification publishing
     summaryGenerationFunction.addToRolePolicy(
       new iam.PolicyStatement({
@@ -2201,6 +2193,7 @@ export class ApiGatewayStack extends cdk.Stack {
         handler: "connect.handler",
         timeout: Duration.seconds(10),
         memorySize: 256,
+        tracing: lambda.Tracing.ACTIVE,
         layers: [javascriptPowertoolsLayer],
         functionName: `${id}-WsConnect`,
         environment: {
@@ -2248,6 +2241,7 @@ export class ApiGatewayStack extends cdk.Stack {
         handler: "disconnect.handler",
         timeout: Duration.seconds(10),
         memorySize: 128,
+        tracing: lambda.Tracing.ACTIVE,
         layers: [javascriptPowertoolsLayer],
         functionName: `${id}-WsDisconnect`,
         environment: {
@@ -2266,6 +2260,7 @@ export class ApiGatewayStack extends cdk.Stack {
         handler: "default.handler",
         timeout: Duration.seconds(10),
         memorySize: 256,
+        tracing: lambda.Tracing.ACTIVE,
         layers: [javascriptPowertoolsLayer],
         functionName: `${id}-WsDefault`,
         environment: {
@@ -2440,6 +2435,7 @@ export class ApiGatewayStack extends cdk.Stack {
         handler: "index.handler",
         timeout: Duration.seconds(29),
         memorySize: 512,
+        tracing: lambda.Tracing.ACTIVE,
         layers: [javascriptPowertoolsLayer],
         functionName: `${id}-NotificationService`,
         role: notificationServiceRole, // Dedicated least-privilege role for notification service

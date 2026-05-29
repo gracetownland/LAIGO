@@ -18,6 +18,11 @@ const githubRepo = app.node.tryGetContext("GithubRepo");
 const domainName = app.node.tryGetContext("DomainName") || "";
 const sesVerifiedDomain = app.node.tryGetContext("SesVerifiedDomain") || "";
 
+// Apply cost allocation tags to all resources in the app
+cdk.Tags.of(app).add("Project", "LAIGO");
+cdk.Tags.of(app).add("Environment", environment || "development");
+cdk.Tags.of(app).add("ManagedBy", "CDK");
+
 // grab account and region info
 const env: cdk.Environment = {
   account: process.env.CDK_DEFAULT_ACCOUNT,

@@ -1,2 +1,7 @@
 .kiro/*
 .agent/*
+
+# Python
+__pycache__/
+*.pyc
+*.pyo

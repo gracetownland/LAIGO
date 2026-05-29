@@ -30,8 +30,8 @@ interface ModelOption {
 
 const FALLBACK_MODEL_OPTIONS: ModelOption[] = [
   {
-    label: "Claude 3 Sonnet",
-    value: "anthropic.claude-3-sonnet-20240229-v1:0",
+    label: "Claude Sonnet 4.6",
+    value: "us.anthropic.claude-sonnet-4-6-20250514-v1:0",
     constraints: {
       maxOutputTokens: 2048,
       defaultMaxOutputTokens: 1500,

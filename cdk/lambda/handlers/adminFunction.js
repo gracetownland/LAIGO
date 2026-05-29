@@ -1844,12 +1844,12 @@ const routes = {
         ContentType: "text/csv",
       });
 
-      const presignedUrl = await getSignedUrl(s3, cmd, { expiresIn: 3600 });
+      const presignedUrl = await getSignedUrl(s3, cmd, { expiresIn: 300 });
       response.statusCode = 200;
       response.body = JSON.stringify({
         uploadUrl: presignedUrl,
         s3Key: key,
-        expiresIn: 3600,
+        expiresIn: 300,
       });
     } catch (err) {
       console.error("Failed to generate presigned URL:", err);
