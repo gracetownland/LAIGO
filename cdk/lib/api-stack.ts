@@ -96,6 +96,9 @@ export class ApiGatewayStack extends cdk.Stack {
   ) {
     super(scope, id, props);
 
+    // Determine environment for conditional configuration
+    const isProd = this.node.tryGetContext("Environment") === "production";
+
     // Initialize Lambda layers collection
     this.layerList = {};
 
@@ -103,7 +106,9 @@ export class ApiGatewayStack extends cdk.Stack {
     const allowedOrigin = props.domainName ? `https://${props.domainName}` : "";
     const localDevOrigin = "http://localhost:5173";
     const s3CorsAllowedOrigins = allowedOrigin
-      ? [allowedOrigin, localDevOrigin]
+      ? isProd
+        ? [allowedOrigin] // Production: only the real domain
+        : [allowedOrigin, localDevOrigin] // Development: include localhost
       : ["*"];
     // Spread into each Lambda's environment when allowedOrigin is set
     const corsEnv: { [key: string]: string } = allowedOrigin
@@ -364,7 +369,7 @@ export class ApiGatewayStack extends cdk.Stack {
 
     // Create CloudWatch log group for API access logs
     const accessLogGroup = new logs.LogGroup(this, `${id}-ApiAccessLogs`, {
-      retention: logs.RetentionDays.ONE_WEEK,
+      retention: logs.RetentionDays.ONE_MONTH,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
@@ -968,7 +973,7 @@ export class ApiGatewayStack extends cdk.Stack {
           filtersConfig: [
             {
               inputStrength: "MEDIUM",
-              outputStrength: "NONE",
+              outputStrength: "MEDIUM",
               type: "PROMPT_ATTACK",
               inputAction: "BLOCK",
               outputAction: "BLOCK",
@@ -1121,7 +1126,7 @@ export class ApiGatewayStack extends cdk.Stack {
         parameterName: `/${id}/LAIGO/MessageLimit`,
         description:
           "Parameter containing the Message Limit for the AI assistant (per day)",
-        stringValue: "Infinity",
+        stringValue: "50",
       },
     );
 
@@ -1201,7 +1206,8 @@ export class ApiGatewayStack extends cdk.Stack {
         },
         billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
         encryption: dynamodb.TableEncryption.AWS_MANAGED,
-        removalPolicy: cdk.RemovalPolicy.DESTROY,
+        pointInTimeRecovery: true,
+        removalPolicy: isProd ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
       },
     );
 
@@ -1235,7 +1241,8 @@ export class ApiGatewayStack extends cdk.Stack {
         billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
         timeToLiveAttribute: "ttl",
         encryption: dynamodb.TableEncryption.AWS_MANAGED,
-        removalPolicy: cdk.RemovalPolicy.DESTROY,
+        pointInTimeRecovery: true,
+        removalPolicy: isProd ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
       },
     );
 
@@ -1280,7 +1287,7 @@ export class ApiGatewayStack extends cdk.Stack {
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       timeToLiveAttribute: "ttl",
       encryption: dynamodb.TableEncryption.AWS_MANAGED,
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      removalPolicy: isProd ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
     });
 
     // Add GSI for connection lookup by user ID
@@ -1314,6 +1321,17 @@ export class ApiGatewayStack extends cdk.Stack {
       },
     );
 
+    // S3 access logging bucket for audit trail
+    const s3AccessLogsBucket = new s3.Bucket(this, `${id}-s3-access-logs`, {
+      bucketName: `${id.toLowerCase()}-s3-access-logs-${this.account}`,
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      enforceSSL: true,
+      lifecycleRules: [{ expiration: cdk.Duration.days(90), id: "expire-old-logs" }],
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
+    });
+
     // S3 bucket for whitelist CSV uploads (avoids WAF body-size restrictions)
     const whitelistUploadBucket = new s3.Bucket(
       this,
@@ -1324,6 +1342,8 @@ export class ApiGatewayStack extends cdk.Stack {
         encryption: s3.BucketEncryption.S3_MANAGED,
         blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
         enforceSSL: true,
+        serverAccessLogsBucket: s3AccessLogsBucket,
+        serverAccessLogsPrefix: "whitelist-bucket/",
         cors: [
           {
             allowedHeaders: ["Content-Type", "Content-Length", "x-amz-*"],
@@ -1334,8 +1354,8 @@ export class ApiGatewayStack extends cdk.Stack {
             allowedOrigins: s3CorsAllowedOrigins,
           },
         ],
-        removalPolicy: cdk.RemovalPolicy.DESTROY,
-        autoDeleteObjects: true,
+        removalPolicy: isProd ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
+        autoDeleteObjects: !isProd,
         lifecycleRules: [
           {
             expiration: cdk.Duration.days(1),
@@ -1926,6 +1946,8 @@ export class ApiGatewayStack extends cdk.Stack {
       {
         bucketName: `${id.toLowerCase()}-audio-prompt-${this.account}`,
         blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+        serverAccessLogsBucket: s3AccessLogsBucket,
+        serverAccessLogsPrefix: "audio-bucket/",
         cors: [
           {
             allowedHeaders: ["Content-Type", "Content-Length", "x-amz-*"],
@@ -1937,9 +1959,9 @@ export class ApiGatewayStack extends cdk.Stack {
             allowedOrigins: s3CorsAllowedOrigins,
           },
         ],
-        // When deleting the stack, the bucket will be deleted as well
-        removalPolicy: cdk.RemovalPolicy.DESTROY,
-        autoDeleteObjects: true,
+        // Environment-aware removal policy
+        removalPolicy: isProd ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
+        autoDeleteObjects: !isProd,
         enforceSSL: true,
         encryption: s3.BucketEncryption.S3_MANAGED, // Explicit encryption at rest with AWS-managed keys
         lifecycleRules: [
@@ -2323,6 +2345,10 @@ export class ApiGatewayStack extends cdk.Stack {
       webSocketApi: this.wsApi,
       stageName: "prod",
       autoDeploy: true,
+      throttle: {
+        rateLimit: 100,  // 100 requests per second
+        burstLimit: 200, // Allow bursts up to 200
+      },
     });
 
     // Grant TextGen Lambda permission to post messages back to WebSocket connections
