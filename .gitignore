@@ -7,21 +7,14 @@ __pycache__/
 *.pyo
 # Dependencies
 node_modules/
-docs/code-reviews
+
 # CDK output
 cdk.out/
 
-# CDK source (infrastructure-as-code)
-cdk/bin/
-cdk/lib/
-cdk/test/
+# CDK dependencies
 cdk/node_modules
-cdk/package.json
-cdk/package-lock.json
-cdk/cdk.json
-cdk/tsconfig.json
-cdk/README.md
 
+# Frontend dependencies
 frontend/node_modules
 
 # Logs
@@ -48,19 +41,6 @@ Thumbs.db
 dist/
 build/
 coverage/
-
-# Frontend source
-frontend/src/
-frontend/public/
-frontend/package.json
-frontend/package-lock.json
-frontend/index.html
-frontend/tsconfig.json
-frontend/tsconfig.app.json
-frontend/tsconfig.node.json
-frontend/vite.config.ts
-frontend/eslint.config.js
-frontend/README.md
 
 # TypeScript
 *.tsbuildinfo
