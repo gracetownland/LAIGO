@@ -2,10 +2,11 @@ import logging
 import boto3
 import json
 from typing import Optional
+from bedrock_client import get_bedrock_runtime_client
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-bedrock_runtime = boto3.client("bedrock-runtime")
+bedrock_runtime = get_bedrock_runtime_client()
 
 
 def _build_request_payload(model_id: str, prompt: str, temperature: float, max_tokens: int, top_p: Optional[float]) -> dict:

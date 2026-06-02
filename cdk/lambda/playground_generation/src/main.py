@@ -4,6 +4,7 @@ import boto3
 import logging
 import uuid
 from aws_lambda_powertools import Logger
+from bedrock_client import get_bedrock_runtime_client
 
 from helpers.chat import get_bedrock_llm, get_playground_streaming_response
 
@@ -24,7 +25,7 @@ BEDROCK_MAX_TOKENS_PARAM = os.environ.get("BEDROCK_MAX_TOKENS_PARAM")
 # AWS Clients
 secrets_manager_client = boto3.client("secretsmanager")
 ssm_client = boto3.client("ssm", region_name=REGION)
-bedrock_runtime = boto3.client("bedrock-runtime", region_name=REGION)
+bedrock_runtime = get_bedrock_runtime_client(region_name=REGION)
 
 # Cached resources
 BEDROCK_LLM_ID = None

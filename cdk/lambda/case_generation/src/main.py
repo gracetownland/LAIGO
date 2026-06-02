@@ -10,6 +10,7 @@ import psycopg
 from botocore.exceptions import ClientError
 from aws_lambda_powertools import Logger, Metrics
 from aws_lambda_powertools.metrics import MetricUnit
+from bedrock_client import get_bedrock_runtime_client
 
 from helpers.chat import get_bedrock_llm, get_response
 
@@ -33,7 +34,7 @@ GUARDRAIL_VERSION = os.environ["GUARDRAIL_VERSION"]
 # AWS clients
 secrets_manager_client = boto3.client("secretsmanager")
 ssm_client = boto3.client("ssm", region_name=REGION)
-bedrock_runtime = boto3.client("bedrock-runtime", region_name=REGION)
+bedrock_runtime = get_bedrock_runtime_client(region_name=REGION)
 
 # Globals
 connection = None

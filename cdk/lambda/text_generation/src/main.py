@@ -8,6 +8,7 @@ import time
 import uuid
 import functools
 from aws_lambda_powertools import Logger, Metrics
+from bedrock_client import get_bedrock_runtime_client
 from aws_lambda_powertools.metrics import MetricUnit
 
 from helpers.chat import get_bedrock_llm, get_initial_student_query, get_response, get_streaming_response
@@ -32,7 +33,7 @@ GUARDRAIL_VERSION = os.environ["GUARDRAIL_VERSION"]
 # AWS Clients
 secrets_manager_client = boto3.client("secretsmanager")
 ssm_client = boto3.client("ssm", region_name=REGION)
-bedrock_runtime = boto3.client("bedrock-runtime", region_name=REGION)
+bedrock_runtime = get_bedrock_runtime_client(region_name=REGION)
 
 # Cached resources
 connection = None

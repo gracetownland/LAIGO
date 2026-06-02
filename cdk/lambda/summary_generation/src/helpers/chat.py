@@ -4,6 +4,7 @@ import boto3
 import logging
 
 from botocore.exceptions import ClientError
+from bedrock_client import get_bedrock_runtime_client
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -11,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 # AWS Clients
 dynamodb = boto3.client('dynamodb')
-bedrock_runtime = boto3.client('bedrock-runtime')
+bedrock_runtime = get_bedrock_runtime_client()
 
 
 def _build_invoke_request(llm: dict, system_prompt: str, user_prompt: str) -> dict:

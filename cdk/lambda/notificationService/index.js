@@ -4,6 +4,7 @@ const {
   QueryCommand,
   UpdateItemCommand,
   DeleteItemCommand,
+  BatchWriteItemCommand,
 } = require("@aws-sdk/client-dynamodb");
 const {
   ApiGatewayManagementApiClient,
@@ -546,9 +547,12 @@ async function deleteNotification(userId, notificationId, event) {
  */
 async function markAllNotificationsAsRead(userId, event) {
   try {
-    // Get all unread notifications for the user
-    const result = await dynamodb.send(
-      new QueryCommand({
+    let lastEvaluatedKey = undefined;
+    let totalUpdated = 0;
+
+    // Paginate through all unread notifications
+    do {
+      const queryParams = {
         TableName: process.env.NOTIFICATION_TABLE_NAME,
         KeyConditionExpression: "PK = :pk",
         FilterExpression: "isRead = :isRead",
@@ -556,44 +560,61 @@ async function markAllNotificationsAsRead(userId, event) {
           ":pk": { S: `USER#${userId}` },
           ":isRead": { BOOL: false },
         },
-      }),
-    );
-
-    if (!result.Items || result.Items.length === 0) {
-      return {
-        statusCode: 200,
-        headers: getCorsHeaders(event),
-        body: JSON.stringify({ updated: 0 }),
       };
-    }
+      if (lastEvaluatedKey) {
+        queryParams.ExclusiveStartKey = lastEvaluatedKey;
+      }
 
-    // Update each notification
-    const updatePromises = result.Items.map((item) => {
-      const notification = unmarshall(item);
-      return dynamodb.send(
-        new UpdateItemCommand({
-          TableName: process.env.NOTIFICATION_TABLE_NAME,
-          Key: marshall({
-            PK: notification.PK,
-            SK: notification.SK,
-          }),
-          UpdateExpression:
-            "SET isRead = :isRead, readStatus = :status, readAt = :readAt",
-          ExpressionAttributeValues: marshall({
-            ":isRead": true,
-            ":status": "READ",
-            ":readAt": new Date().toISOString(),
-          }),
-        }),
-      );
-    });
+      const result = await dynamodb.send(new QueryCommand(queryParams));
+      lastEvaluatedKey = result.LastEvaluatedKey;
 
-    await Promise.all(updatePromises);
+      if (!result.Items || result.Items.length === 0) {
+        continue;
+      }
+
+      // Process in batches of 25 (DynamoDB BatchWriteItem limit)
+      // We use UpdateItem here since BatchWriteItem only supports Put/Delete
+      const batchSize = 25;
+      for (let i = 0; i < result.Items.length; i += batchSize) {
+        const batch = result.Items.slice(i, i + batchSize);
+        const updatePromises = batch.map((item) => {
+          const notification = unmarshall(item);
+          return dynamodb.send(
+            new UpdateItemCommand({
+              TableName: process.env.NOTIFICATION_TABLE_NAME,
+              Key: marshall({
+                PK: notification.PK,
+                SK: notification.SK,
+              }),
+              UpdateExpression:
+                "SET isRead = :isRead, readStatus = :status, readAt = :readAt",
+              ExpressionAttributeValues: marshall({
+                ":isRead": true,
+                ":status": "READ",
+                ":readAt": new Date().toISOString(),
+              }),
+            }),
+          );
+        });
+
+        const results = await Promise.allSettled(updatePromises);
+        const succeeded = results.filter((r) => r.status === "fulfilled").length;
+        const failed = results.filter((r) => r.status === "rejected");
+        totalUpdated += succeeded;
+
+        if (failed.length > 0) {
+          logger.warn("Some notifications failed to mark as read", {
+            failedCount: failed.length,
+            batchIndex: i,
+          });
+        }
+      }
+    } while (lastEvaluatedKey);
 
     return {
       statusCode: 200,
       headers: getCorsHeaders(event),
-      body: JSON.stringify({ updated: result.Items.length }),
+      body: JSON.stringify({ updated: totalUpdated }),
     };
   } catch (error) {
     logger.error("Error marking all notifications as read", error);

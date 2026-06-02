@@ -7,6 +7,7 @@ import uuid
 from datetime import datetime
 import psycopg
 from botocore.exceptions import ClientError
+from bedrock_client import get_bedrock_runtime_client
 from helpers.chat import (
     get_bedrock_llm, 
     generate_lawyer_summary, 
@@ -35,7 +36,7 @@ BEDROCK_MAX_TOKENS_PARAM = os.environ.get("BEDROCK_MAX_TOKENS_PARAM")
 # AWS Clients
 secrets_manager_client = boto3.client("secretsmanager")
 ssm_client = boto3.client("ssm", region_name=REGION)
-bedrock_runtime = boto3.client("bedrock-runtime", region_name=REGION)
+bedrock_runtime = get_bedrock_runtime_client(region_name=REGION)
 eventbridge_client = boto3.client("events", region_name=REGION)
 
 # Cached resources
