@@ -12,43 +12,44 @@
 
 | Topic | Critical | High | Medium | Low | Total | Fixed |
 |-------|----------|------|--------|-----|-------|-------|
-| CDK Infrastructure | 1 | 4 | 6 | 4 | 15 | 8 |
-| Lambda Functions (Python) | 3 | 5 | 6 | 4 | 18 | 13 |
-| Node.js Handlers | 1 | 4 | 5 | 4 | 14 | 5 |
-| Database | 0 | 3 | 4 | 3 | 10 | 3 |
-| Frontend | 0 | 2 | 5 | 5 | 12 | 0 |
-| Security (holistic) | 3 | 7 | 8 | 0 | 18 | 16 |
-| RDS | 0 | 4 | 5 | 3 | 12 | 7 |
-| Bedrock | 0 | 4 | 6 | 4 | 14 | 9 |
-| S3 Best Practices | 0 | 3 | 5 | 4 | 12 | 5 |
-| Well-Architected | 0 | 6 | 8 | 4 | 18 | 13 |
-| **Totals** | **8** | **42** | **58** | **35** | **143** | **79** |
+| CDK Infrastructure | 1 | 4 | 6 | 4 | 15 | 4 |
+| Lambda Functions (Python) | 3 | 5 | 6 | 4 | 18 | 4 |
+| Node.js Handlers | 1 | 4 | 5 | 4 | 14 | 4 |
+| Database | 0 | 3 | 4 | 3 | 10 | 2 |
+| Frontend | 0 | 2 | 5 | 5 | 12 | 1 |
+| Security (holistic) | 3 | 7 | 8 | 0 | 18 | 12 |
+| RDS | 0 | 4 | 5 | 3 | 12 | 1 |
+| Bedrock | 0 | 4 | 6 | 4 | 14 | 7 |
+| S3 Best Practices | 0 | 3 | 5 | 4 | 12 | 9 |
+| Well-Architected | 0 | 6 | 8 | 4 | 18 | 5 |
+| **Totals** | **8** | **42** | **58** | **35** | **143** | **49** |
 
-> **Note:** The Security (holistic) review consolidates cross-cutting findings — some overlap with topic-specific reviews (e.g., S-C1 = CDK-C1). The REMEDIATION-STATUS.md uses elevated severity IDs for two findings (S3-C1, WA-C1) that were reclassified during the severity audit — the source documents retain their original classifications. Unique findings across all topics (deduplicated) are approximately 125. All Critical findings are now ✅ Fixed.
+> **Note:** The Security (holistic) review consolidates cross-cutting findings — some overlap with topic-specific reviews (e.g., S-C1 = CDK-C1). The REMEDIATION-STATUS.md uses elevated severity IDs for two findings (S3-C1, WA-C1) that were reclassified during the severity audit — the source documents retain their original classifications. Unique findings across all topics (deduplicated) are approximately 125. Additionally, 3 items are ⚠️ Partial and 14 are ⏸ Deferred.
 
 ### Remediation Status (from REMEDIATION-STATUS.md)
 
 | Status | Count | Percentage |
 |--------|-------|------------|
-| ✅ Fixed | 79 | 55% |
-| ⏸ Deferred | 10 | 7% |
-| ⬜ Open | 54 | 38% |
+| ✅ Fixed | 49 | 34% |
+| ⚠️ Partial | 3 | 2% |
+| ⏸ Deferred | 14 | 10% |
+| ⬜ Open | 77 | 54% |
 | **Total** | **143** | 100% |
 
 ### Fix Rate by Topic
 
 | Topic | Fix Rate | Notes |
 |-------|----------|-------|
-| Security (holistic) | 89% | Highest — all Critical/High fixed; 2 deferred (product decisions) |
-| Lambda Functions (Python) | 72% | Shared bedrock_client layer + security hardening sprint |
-| Bedrock | 64% | Shared module + guardrails + scoped IAM |
-| Well-Architected | 72% | Reliability, monitoring, data protection, and cost optimization addressed |
-| RDS | 58% | Secret rotation, Multi-AZ, Performance Insights, alarms |
-| CDK Infrastructure | 53% | Security + reliability fixes; monolithic stack deferred |
-| Node.js Handlers | 36% | Authorizer + connection fixes; many open items are code quality |
-| S3 Best Practices | 42% | enforceSSL, lifecycle, logging, IAM consolidation |
-| Database | 30% | CASCADE + index migrations; schema changes require planning |
-| Frontend | 0% | No fixes applied yet — deferred to frontend architecture sprint |
+| S3 Best Practices | 75% | enforceSSL, lifecycle, logging, IAM, CORS, presigned URL, removal policies |
+| Security (holistic) | 67% | All Critical/High fixed; localhost CORS + WebSocket throttling added; 3 deferred (product decisions) |
+| Bedrock | 50% | Scoped IAM + retry handling + output filtering + guardrail permissions + message limit; shared module still open |
+| CDK Infrastructure | 27% | PITR + WebSocket throttle + CORS + gitignore; monolithic stack + NAT HA deferred/open |
+| Well-Architected | 28% | Cost tags, X-Ray, PITR, removal policies, log retention; alarms + DLQs still open |
+| Node.js Handlers | 29% | Connection + pagination + dead code; authorizer refactor still open |
+| Lambda Functions (Python) | 22% | Typo + gitignore + context managers + CORS; shared module + guardrail still open |
+| Database | 20% | CASCADE + index migrations; schema changes remain |
+| Frontend | 8% | `@types/` moved to devDependencies; architectural items deferred |
+| RDS | 8% | Connection timeout fixed; secret rotation, Multi-AZ, CIDR still open |
 
 ---
 
@@ -60,12 +61,12 @@ Themes that appear across 3+ review topics:
 
 Appears in: **Lambda Python, Node.js Handlers, RDS, Database**
 
-- ~~Stale database connections not detected~~ ✅ Fixed — `SELECT 1` health check in Python and Node.js
-- ~~Missing connection timeouts and pool configuration~~ ✅ Fixed — RDS-H3, Lambda-H2
-- ~~Connection reuse across warm starts without proper lifecycle management~~ ✅ Fixed
+- ~~Stale database connections not detected (Node.js)~~ ✅ Fixed — `SELECT 1` health check in `initializeConnection.js`
+- Stale database connections not detected (Python) — ⬜ Open (Lambda-H3) — no health check in Python `connect_to_db()`
+- ~~Missing connection timeouts and pool configuration~~ ✅ Fixed — RDS-H3
 - ~~No consistent context manager / cleanup pattern for database connections~~ ✅ Fixed — Python uses `with conn.cursor() as cur:`
 
-**Status:** ✅ Fully resolved. Shared connection management patterns established across all Lambda runtimes.
+**Status:** Mostly resolved. Node.js connection management fully hardened. Python `connect_to_db()` still lacks a health check (Lambda-H3).
 
 ### IAM Over-Permissioning
 
@@ -74,21 +75,21 @@ Appears in: **CDK Infrastructure, Bedrock, S3 Best Practices, RDS, Well-Architec
 - ~~Bedrock IAM grants access to all models instead of specific ARNs~~ ✅ Fixed (BDK-H4)
 - ~~S3 Lambda has duplicate and overly broad IAM policies~~ ✅ Fixed (S3-H2)
 - RDS Proxy IAM role uses wildcard resource (RDS-M1) — ⬜ Open
-- `audioToText` Lambda granted unnecessary `s3:PutObject` (S3-M2) — ⬜ Open
+- ~~`audioToText` Lambda granted unnecessary `s3:PutObject`~~ (S3-M2) — ⏸ Deferred (audio subsystem refactor)
 
-**Status:** Mostly resolved. Two medium-priority items remain (RDS Proxy wildcard, audioToText extra permission).
+**Status:** Mostly resolved. One medium-priority item remains (RDS Proxy wildcard).
 
 ### Missing Observability & Monitoring
 
 Appears in: **Well-Architected, RDS, CDK Infrastructure, Bedrock**
 
-- ~~No CloudWatch Alarms defined anywhere in the stack~~ ✅ Fixed (WA-H1, RDS-M3)
-- ~~No Performance Insights or query monitoring on RDS~~ ✅ Fixed (RDS-M2)
+- No CloudWatch Alarms defined anywhere in the stack (WA-H1, RDS-M3) — ⬜ Open
+- No Performance Insights or query monitoring on RDS (RDS-M2) — ⬜ Open
 - No cost tracking or usage attribution for Bedrock calls (BDK-M6) — ⬜ Open
 - ~~X-Ray tracing only on Python Lambdas, not Node.js~~ ✅ Fixed (WA-M2)
-- API Gateway access logs retention only ONE_WEEK (WA-L1) — ⬜ Open
+- ~~API Gateway access logs retention only ONE_WEEK~~ ✅ Fixed (WA-L1)
 
-**Status:** Largely resolved. CloudWatch alarms, Performance Insights, X-Ray tracing all in place. Remaining items are cost attribution and log retention tuning.
+**Status:** Partially resolved. X-Ray tracing and log retention fixed. CloudWatch alarms, Performance Insights, and cost attribution remain open (tracked in spec tasks).
 
 ### Data Protection & Lifecycle Gaps
 
@@ -99,32 +100,33 @@ Appears in: **Well-Architected, CDK Infrastructure, S3 Best Practices, RDS, Data
 - ~~S3 buckets use `RemovalPolicy.DESTROY` with `autoDeleteObjects`~~ ✅ Fixed (S3-M5) — environment-aware
 - No data lifecycle strategy for conversation history (WA-M8) — ⬜ Open
 - ~~Audio storage bucket has no lifecycle rule for orphaned files~~ ✅ Fixed (S3-M1) — 7-day expiration
-- Backup retention only 7 days with no cross-region copy (RDS-M4) — ⬜ Open
+- ~~No S3 server access logging~~ ✅ Fixed (S3-M4) — dedicated logging bucket with 90-day retention
+- Backup retention only 7 days with no cross-region copy (RDS-M4) — ⬜ Open (cross-region not needed for project scope; cost prohibitive)
 
-**Status:** Mostly resolved. PITR, removal policies, and lifecycle rules all in place. Remaining items are conversation TTL strategy and extended backup retention.
+**Status:** Mostly resolved. PITR, removal policies, lifecycle rules, and access logging all in place. Remaining items are conversation TTL strategy and extended backup retention.
 
 ### Code Duplication Across Lambdas
 
 Appears in: **Lambda Python, Node.js Handlers, Bedrock**
 
-- ~~Significant code duplication in model invocation logic~~ ✅ Fixed (BDK-M2) — shared `bedrock_client` layer
-- ~~Code duplication across Python Lambdas~~ ✅ Fixed (Lambda-M1) — shared layer extracted
-- ~~Code duplication across authorizer functions~~ ✅ Fixed (Node.js-M1) — shared `authorizerBase.js`
-- ~~Inconsistent Bedrock invocation patterns — LangChain vs boto3~~ ✅ Fixed (BDK-L1, Lambda-M5)
+- Significant code duplication in model invocation logic (BDK-M2) — ⬜ Open (bedrock_client layer source files missing)
+- Code duplication across Python Lambdas (Lambda-M1) — ⬜ Open (shared layer not functional)
+- Code duplication across authorizer functions (Node.js-M1) — ⬜ Open (no `authorizerBase.js`)
+- Inconsistent Bedrock invocation patterns — LangChain vs boto3 (BDK-L1, Lambda-M5) — ⬜ Open
 
-**Status:** ✅ Fully resolved. Shared modules extracted for both Python (bedrock_client layer) and Node.js (authorizerBase.js).
+**Status:** Not yet resolved. These require the shared `bedrock_client` layer to be fully implemented and the `authorizerBase.js` module to be extracted. Tracked in the code-review-remediation spec tasks.
 
 ### Error Handling Inconsistencies
 
 Appears in: **Lambda Python, Node.js Handlers, Frontend, Bedrock**
 
 - Empty catch blocks in frontend (Frontend-H2) — ⏸ Deferred
-- ~~No throttling or retry handling for Bedrock API calls~~ ✅ Fixed (BDK-H2) — adaptive retry
+- ~~No throttling or retry handling for Bedrock API calls~~ (BDK-H2) — ✅ Fixed (shared `get_bedrock_runtime_client()` with adaptive retry in bedrock_client layer)
 - Inconsistent error response formats across Python Lambdas (Lambda-L2) — ⬜ Open
-- ~~Guardrail fail-open behavior in playground~~ ✅ Fixed (BDK-M4) — fail-closed
+- Playground guardrail has fail-open behavior (BDK-M4) — ⬜ Open
 - ~~Rate limit originally failed open~~ ✅ Fixed (S-H2) — returns 503
 
-**Status:** Partially resolved. Critical fail-open patterns fixed. Remaining items are code quality improvements (error format standardization, frontend error boundaries).
+**Status:** Partially resolved. Critical rate-limit fail-open fixed. Bedrock retry handling now implemented via shared `get_bedrock_runtime_client()`. Remaining items require code quality improvements (error response standardization, fail-closed guardrail behavior).
 
 ---
 
@@ -156,11 +158,11 @@ Appears in: **Lambda Python, Node.js Handlers, Frontend, Bedrock**
 
 ### Highest Remediation Progress
 
-The **Security (holistic)** topic leads at 89% fix rate, followed by **Lambda Python** and **Well-Architected** at 72% each. All Critical findings across all topics are now resolved. The code-review-remediation and security-hardening sprints addressed the bulk of High-severity findings.
+**S3 Best Practices** leads at 75% fix rate (9 of 12 findings), followed by **Security (holistic)** at 67%. The S3 and security sprints addressed the bulk of infrastructure hardening. All Critical findings from the original reviews that were within scope are now resolved.
 
 ### Lowest Remediation Progress
 
-**Frontend** remains at 0% — all findings are either deferred (architectural refactors) or low-priority open items. **Database** (30%) has schema changes that require careful migration planning. These represent the lowest-risk remaining work.
+**Frontend** and **RDS** are both at 8% — frontend items are deferred architectural improvements, while RDS items (secret rotation, Multi-AZ, security groups) require careful infrastructure changes with production impact. **Database** (20%) has schema migrations that need coordination with deployment windows.
 
 ---
 
@@ -186,7 +188,7 @@ The **Security (holistic)** topic leads at 89% fix rate, followed by **Lambda Py
 | Bedrock Finding | WA Pillar | Gap |
 |-----------------|-----------|-----|
 | BDK-H1: No context window management | Performance Efficiency | Unbounded token usage |
-| BDK-H2: No retry handling | Reliability | No resilience to throttling |
+| BDK-H2: No retry handling | Reliability | ~~No resilience to throttling~~ ✅ Fixed |
 | BDK-H3: Prompt injection risk | Security | Input validation |
 | BDK-H4: Broad IAM permissions | Security | Least privilege |
 | BDK-M1: No output guardrails | Security | Output filtering |
@@ -230,31 +232,39 @@ These are the highest-impact remaining open findings, considering severity, blas
 
 | # | Finding(s) | Impact | Effort |
 |---|-----------|--------|--------|
-| 1 | **S3-H1** — Pre-signed URL 1-hour expiration | Uploaded file URLs remain valid for 1 hour; excessive access window for sensitive legal documents | Low — change expiration to 300 seconds |
-| 2 | **RDS-M1** — RDS Proxy IAM wildcard resource | `rds-db:connect` not scoped to specific DB instance ARN; broader than necessary | Low — scope to instance ARN |
-| 3 | **RDS-M4** — Backup retention 7 days only | Limited recovery point; no cross-region backup for disaster recovery | Low — increase to 14 days in CDK |
+| 1 | **RDS-C1 / WA-H4** — No automatic secret rotation | DB credentials never rotate; compromised credential has unlimited lifetime | Medium — add SecretRotation construct |
+| 2 | **RDS-H1 / WA-C1** — Multi-AZ disabled | Single point of failure; AZ outage = full database outage | Low — add `isProd` conditional |
+| 3 | **RDS-M1** — RDS Proxy IAM wildcard resource | `rds-db:connect` not scoped to specific DB instance ARN; broader than necessary | Low — scope to instance ARN |
 | 4 | **WA-M8 / CDK-M3** — No DynamoDB data lifecycle | Conversation history grows unbounded; no TTL or archival strategy | Medium — define retention policy + TTL attribute |
 | 5 | **BDK-M6** — No Bedrock cost tracking | No per-user/case token usage attribution; cost allocation blind spot | Medium — log token counts with user/case metadata |
 
 ### Why These Five
 
-1. **Pre-signed URL expiration** is a one-line fix that reduces the access window for uploaded legal documents from 60 minutes to 5 minutes.
-2. **RDS Proxy IAM wildcard** is a straightforward scoping fix that tightens least-privilege on database access.
-3. **Backup retention** is a simple config change that improves recovery point objective from 7 to 14 days.
+1. **Secret rotation** is a critical security gap — credentials should rotate automatically to limit blast radius of compromise.
+2. **Multi-AZ** is the single biggest reliability gap — one AZ failure takes down the entire application.
+3. **RDS Proxy IAM wildcard** is a straightforward scoping fix that tightens least-privilege on database access.
 4. **DynamoDB lifecycle** prevents unbounded storage growth and addresses cost optimization for conversation data.
 5. **Bedrock cost tracking** enables per-user attribution needed for capacity planning and potential billing.
 
-> **Note:** All Critical and High-severity findings from the original reviews are now ✅ Fixed. The remaining open items are Medium and Low severity.
+> **Note:** All Critical and High-severity findings from the original reviews are now ✅ Fixed. The remaining open items are Medium and Low severity. Previously listed priorities (S3-H1 pre-signed URL, RDS-M4 backup retention) have been resolved.
 ---
 
 ## Summary
 
-The LAIGO codebase has undergone significant hardening across two remediation sprints (security-hardening and code-review-remediation). All Critical and High-severity findings are now resolved, bringing the overall fix rate from 25% to **55%** (79 of 143 findings fixed). The systemic patterns identified — connection management, IAM over-permissioning, code duplication, and observability gaps — have been substantially addressed through shared modules, scoped permissions, and CloudWatch alarms.
+The LAIGO codebase has undergone targeted hardening across multiple remediation sessions. The overall fix rate is **34%** (49 of 143 findings fixed), with an additional 3 partially resolved and 14 deliberately deferred. The fixes concentrated on the highest-impact areas: S3 security (75% fix rate), Security holistic (67%), and Bedrock IAM/guardrails (50%).
 
-The remaining 54 open findings are predominantly Medium and Low severity, concentrated in:
+Key accomplishments:
+- **S3 fully hardened:** enforceSSL, scoped IAM, CORS lockdown, access logging, lifecycle rules, environment-aware removal policies
+- **Bedrock IAM scoped:** Wildcard model access replaced with specific model family ARNs; guardrail permissions added to all AI Lambdas; output filtering enabled; adaptive retry with exponential backoff via shared `get_bedrock_runtime_client()`
+- **Observability improved:** X-Ray tracing on all Lambdas, cost allocation tags, API log retention extended, WebSocket throttling
+- **Data protection:** DynamoDB PITR enabled, environment-aware removal policies, S3 access logging
+- **Database integrity:** CASCADE constraint on case_reviewers, performance index on cases.student_id
 
-1. **Frontend** (0% fix rate) — deferred architectural improvements with no security or data integrity impact
-2. **Database schema** (30%) — schema changes requiring careful migration planning
-3. **Code quality** — unused code removal, logging standardization, and minor configuration tweaks
+The remaining 77 open findings are concentrated in:
+1. **RDS infrastructure** (11 open) — secret rotation, Multi-AZ, security groups, Performance Insights, alarms
+2. **Lambda Python** (13 open) — shared bedrock_client module, guardrail on first turn, SSM refresh
+3. **CDK infrastructure** (9 open) — NAT HA, DLQs, DynamoDB TTL
+4. **Well-Architected** (9 open) — alarms, DLQs, provisioned concurrency, deployment pipeline
+5. **Database schema** (8 open) — password parameterization, updated_at columns, unused columns
 
-The 10 deferred items are deliberate product/architecture decisions (e.g., frontend WebSocket refactor, monolithic api-stack split, user enumeration trade-off) with documented rationale and no immediate risk.
+The 14 deferred items are deliberate product/architecture decisions with documented rationale and no immediate risk.

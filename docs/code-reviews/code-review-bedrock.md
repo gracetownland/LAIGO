@@ -12,10 +12,10 @@
 | Severity | Count | Fixed |
 |----------|-------|-------|
 | Critical | 0     | 0     |
-| High     | 4     | 0     |
+| High     | 4     | 1     |
 | Medium   | 6     | 0     |
 | Low      | 4     | 0     |
-| **Total**| **14**| **0** |
+| **Total**| **14**| **1** |
 
 ---
 
@@ -62,8 +62,8 @@ memory = ConversationTokenBufferMemory(
 ---
 
 ### BDK-H2. No throttling or retry handling for Bedrock API calls
-- **Status:** ⬜ Open
-- **Files:** `cdk/lambda/case_generation/src/helpers/chat.py`, `cdk/lambda/summary_generation/src/helpers/chat.py`
+- **Status:** ✅ Fixed
+- **Files:** `cdk/layers/bedrock_client/python/bedrock_client/__init__.py`, `cdk/lambda/case_generation/src/helpers/chat.py`, `cdk/lambda/summary_generation/src/helpers/chat.py`
 - **Description:** Raw boto3 `invoke_model()` calls have no retry logic, no exponential backoff, and no specific handling for `ThrottlingException`, `ModelTimeoutException`, `ModelNotReadyException`, or `ServiceUnavailableException`. A single transient failure causes immediate user-facing errors.
 - **Impact:** During traffic spikes or Bedrock service degradation, every affected request fails immediately rather than retrying. This creates cascading user-visible errors and potential data inconsistency (e.g., summary_generation marks a job as failed when a retry would have succeeded).
 - **Fix:**

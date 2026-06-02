@@ -167,10 +167,10 @@ System prompts are stored in the **PostgreSQL database** in a `prompt_versions` 
 
 ### Missing Error Handling Patterns
 
-- No exponential backoff for throttling (ThrottlingException)
+- ~~No exponential backoff for throttling (ThrottlingException)~~ ✅ Fixed — `get_bedrock_runtime_client()` in bedrock_client layer uses adaptive retry (5 attempts)
 - No circuit breaker pattern
-- No specific handling for `ModelTimeoutException`, `ModelNotReadyException`, `ServiceUnavailableException`
-- No request timeout configuration on boto3 clients (uses default)
+- No specific handling for `ModelTimeoutException`, `ModelNotReadyException`, `ServiceUnavailableException` (handled by adaptive retry)
+- ~~No request timeout configuration on boto3 clients (uses default)~~ ✅ Fixed — 120s read timeout, 10s connect timeout
 - LangChain-based functions rely on LangChain's internal retry behavior (if any)
 
 ---
@@ -339,7 +339,7 @@ const bedrockPolicyStatement = new iam.PolicyStatement({
 
 ### Likely High Issues
 - No context window management (could cause model failures on long conversations)
-- No throttling/retry handling for Bedrock API calls (could cause cascading failures)
+- ~~No throttling/retry handling for Bedrock API calls (could cause cascading failures)~~ ✅ Fixed
 - Prompt injection risk via unsanitized case context data in system prompts
 - Overly broad IAM permissions (`foundation-model/*`)
 

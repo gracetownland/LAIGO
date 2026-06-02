@@ -20,18 +20,18 @@ Individual review files (`code-review-*.md`) include per-issue **Status** lines 
 | S-C3 | Authorizer mutable `responseStruct` | ✅ Fixed | `buildAuthResponse()` creates fresh object per invocation in all 3 authorizers |
 | S-H1 | Rate limit race condition | ✅ Fixed | Atomic `UPDATE ... RETURNING` in `usage.py` |
 | S-H2 | Rate limit fails open | ✅ Fixed | Returns 503 on usage check failure instead of `pass` |
-| S-H3 | WebSocket API no throttling | ⬜ Open | No stage throttle configuration on WebSocket API |
+| S-H3 | WebSocket API no throttling | ✅ Fixed | Stage throttle configured: 100 rps rate, 200 burst |
 | S-H4 | `dataTraceEnabled` logs bodies | ⏸ Deferred | Re-enabled (`true`) during development for debugging; disable before production |
-| S-H5 | Localhost in production S3 CORS | ⬜ Open | Needs verification |
+| S-H5 | Localhost in production S3 CORS | ✅ Fixed | `localhost:5173` excluded from S3 CORS origins in production; only included in development |
 | S-H6 | Guardrail bypass on first turn | ⬜ Open | Guardrail only applied in `else` branch (subsequent turns); first turn skips guardrail check |
-| S-H7 | Orphan data on case delete | ⬜ Open | Migration 006 (CASCADE on case_reviewers) does NOT exist; `deleteChatHistory()` NOT implemented |
+| S-H7 | Orphan data on case delete | ⚠️ Partial | Migration 006 (CASCADE on case_reviewers) ✅ exists; `deleteChatHistory()` NOT implemented |
 | S-M1 | Playground no role-based authorization | ⬜ Open | `callerRoles` + `_caller_is_staff()` NOT implemented |
 | S-M2 | User enumeration via `/student/get_name` | ⏸ Deferred | Product decision: restrict to instructor relationship |
 | S-M3 | Client-controlled `audio_file_id` | ⏸ Deferred | Low exploitability — IDs are UUIDs scoped to authenticated user's S3 prefix; server-generated UUIDs recommended as hardening but no immediate risk |
 | S-M4 | CORS falls back to wildcard silently | ✅ Fixed | Warning logged in utils.js and notificationService when `ALLOWED_ORIGIN` unset |
 | S-M5 | Stale database connections not detected | ✅ Fixed | `SELECT 1` health check + reconnect in Node.js handlers and all Python `connect_to_db()` functions |
 | S-M6 | SQL injection pattern in password creation | ✅ Fixed | Parameterized query with `$1`, `$2` for passwords in db_setup/index.js |
-| S-M7 | No DynamoDB point-in-time recovery | ⬜ Open | PITR NOT enabled on any DynamoDB table |
+| S-M7 | No DynamoDB point-in-time recovery | ✅ Fixed | PITR enabled on conversation and notification tables |
 | S-M8 | Inconsistent message counter reset logic | ✅ Fixed | Node.js aligned to UTC calendar day (matching Python usage.py) |
 
 ---
@@ -67,9 +67,9 @@ Individual review files (`code-review-*.md`) include per-issue **Status** lines 
 |----|-------|--------|-------|
 | C1 | Authorizer `responseStruct` | ⬜ Open | See S-C3 — `buildAuthResponse()` NOT implemented |
 | H1 | Stale `postgres` connection | ✅ Fixed | Health check (`SELECT 1`) + reconnect on stale connection in `initializeConnection()` |
-| H2 | Case delete orphans | ⬜ Open | No migration 006 (CASCADE on case_reviewers); no `deleteChatHistory()` |
+| H2 | Case delete orphans | ⚠️ Partial | Migration 006 (CASCADE on case_reviewers) ✅ added; `deleteChatHistory()` still missing |
 | H3 | WebSocket token via `Sec-WebSocket-Protocol` | ⬜ Open | Accepted browser WebSocket trade-off; documented |
-| H4 | `markAllNotificationsAsRead` no pagination | ⬜ Open | Use DynamoDB BatchWriteItem with pagination |
+| H4 | `markAllNotificationsAsRead` no pagination | ✅ Fixed | Paginated with `LastEvaluatedKey` loop + 25-item batches with `Promise.allSettled` for partial failure handling |
 | M1 | Code duplication across authorizer functions | ⬜ Open | No `authorizerBase.js` exists |
 | M2 | User enumeration via `get_name` | ⏸ Deferred | Product decision: restrict to instructor relationship |
 | M3 | Client-controlled `audio_file_id` | ⏸ Deferred | Same as S-M3 — low exploitability; IDs are UUIDs scoped to authenticated user's S3 prefix; no immediate security risk |
@@ -87,8 +87,8 @@ Individual review files (`code-review-*.md`) include per-issue **Status** lines 
 | ID | Issue | Status | Notes |
 |----|-------|--------|-------|
 | C1 | SQL interpolation for passwords | ⬜ Open | Parameterized `CREATE/ALTER USER ... PASSWORD $1` NOT confirmed |
-| H1 | `case_reviewers` no CASCADE | ⬜ Open | Migration 006 does NOT exist |
-| H2 | Missing index on `cases.student_id` | ⬜ Open | Migration 007 does NOT exist |
+| H1 | `case_reviewers` no CASCADE | ✅ Fixed | Migration 006 adds `ON DELETE CASCADE` to `fk_caserev_case` (verified in source) |
+| H2 | Missing index on `cases.student_id` | ✅ Fixed | Migration 007 adds `idx_cases_student_id` index |
 | M1 | Migration 001 is empty no-op | ⬜ Open | Add comment or remove if safe |
 | M2 | No `updated_at` timestamp on most tables | ⬜ Open | Add columns with trigger |
 | M3 | `users.username` column unused | ⬜ Open | Remove in future migration if confirmed |
@@ -111,9 +111,9 @@ Individual review files (`code-review-*.md`) include per-issue **Status** lines 
 | M1 | Pinned Powertools layer versions | ⬜ Open | Dependabot + quarterly review recommended |
 | M2 | `dataTraceEnabled` | ⏸ Deferred | See S-H4 — re-enabled for dev debugging |
 | M3 | DynamoDB conversation table no TTL | ⬜ Open | Define data retention policy |
-| M4 | Localhost CORS | ⬜ Open | See S-H5 — needs verification |
-| M5 | DynamoDB PITR | ⬜ Open | PITR NOT enabled on any DynamoDB table |
-| M6 | WebSocket throttling | ⬜ Open | See S-H3 — no throttle configuration |
+| M4 | Localhost CORS | ✅ Fixed | `localhost:5173` excluded from S3 CORS in production |
+| M5 | DynamoDB PITR | ✅ Fixed | PITR enabled on conversation and notification tables |
+| M6 | WebSocket throttling | ✅ Fixed | Stage throttle: 100 rps rate, 200 burst |
 | L1 | Inconsistent SSM parameter naming | ⬜ Open | Standardize on `/${StackPrefix}/LAIGO/<Name>` |
 | L2 | `version` context variable unused | ⬜ Open | Remove or implement version tagging |
 | L3 | `cdk.out/` in file tree | ✅ Fixed | Already in `cdk/.gitignore` — confirmed present |
@@ -164,10 +164,10 @@ Individual review files (`code-review-*.md`) include per-issue **Status** lines 
 | ID | Issue | Status | Notes |
 |----|-------|--------|-------|
 | BDK-H1 | No context window management for conversation history | ⬜ Open | bedrock_client layer source files missing; no functional token-aware sliding window |
-| BDK-H2 | No throttling or retry handling for Bedrock API calls | ⬜ Open | bedrock_client layer not functional |
+| BDK-H2 | No throttling or retry handling for Bedrock API calls | ✅ Fixed | Shared `get_bedrock_runtime_client()` in bedrock_client layer with adaptive retry (5 attempts); all 7 client instantiations updated |
 | BDK-H3 | Prompt injection via unsanitized case context | ✅ Fixed | `sanitize_prompt_input()` applied in text_generation, playground_generation, summary_generation, and case_generation chat helpers |
 | BDK-H4 | Overly broad IAM permissions for Bedrock model access | ✅ Fixed | Scoped to `anthropic.*` and `meta.*` foundation models + inference profiles |
-| BDK-M1 | No output guardrails applied to model responses | ⬜ Open | Guardrail has `outputStrength: "NONE"` for PROMPT_ATTACK filter |
+| BDK-M1 | No output guardrails applied to model responses | ✅ Fixed | Changed `outputStrength` from `"NONE"` to `"MEDIUM"` for PROMPT_ATTACK filter |
 | BDK-M2 | Significant code duplication in model invocation logic | ⬜ Open | bedrock_client layer not functional (source missing, no imports) |
 | BDK-M3 | Missing guardrail permissions for summary/assess | ✅ Fixed | `bedrock:ApplyGuardrail` added to summaryGenerationFunction and assessProgressFunction |
 | BDK-M4 | Playground guardrail has fail-open behavior | ⬜ Open | Fail-closed handling NOT implemented |
@@ -176,7 +176,7 @@ Individual review files (`code-review-*.md`) include per-issue **Status** lines 
 | BDK-L1 | Inconsistent invocation patterns (LangChain vs boto3) | ⬜ Open | Shared module not functional |
 | BDK-L2 | Hardcoded prompts in case_generation and session naming | ⬜ Open | Move to `prompt_versions` table |
 | BDK-L3 | No prompt caching optimization | ⬜ Open | Evaluate Bedrock prompt caching for system prompts |
-| BDK-L4 | Default message limit set to "Infinity" | ⬜ Open | Set sensible default (e.g., 50/day) |
+| BDK-L4 | Default message limit set to "Infinity" | ✅ Fixed | Changed to "50" (per day) in SSM parameter default |
 
 ---
 
@@ -190,8 +190,8 @@ Individual review files (`code-review-*.md`) include per-issue **Status** lines 
 | S3-M1 | Audio storage bucket has no lifecycle rule | ✅ Fixed | 7-day expiration lifecycle rule added to audioStorageBucket |
 | S3-M2 | `audioToText` Lambda granted unnecessary `s3:PutObject` | ⏸ Deferred | Audio subsystem is being deferred to a dedicated refactor sprint (see Lambda H5); IAM change requires testing with full audio pipeline |
 | S3-M3 | Inconsistent file type validation between Lambdas | ⏸ Deferred | Audio subsystem deferred; file type validation spans audio upload and processing Lambdas |
-| S3-M4 | No S3 server access logging on either bucket | ⬜ Open | No logging bucket or access logs configured |
-| S3-M5 | `RemovalPolicy.DESTROY` with `autoDeleteObjects` on both | ⬜ Open | No environment-aware removal policies |
+| S3-M4 | No S3 server access logging on either bucket | ✅ Fixed | Dedicated logging bucket created; access logging enabled on both audio and whitelist buckets |
+| S3-M5 | `RemovalPolicy.DESTROY` with `autoDeleteObjects` on both | ✅ Fixed | Environment-aware: `RETAIN` for production, `DESTROY` for development |
 | S3-L1 | Overly permissive CORS HTTP methods | ✅ Fixed | Whitelist bucket: PUT+HEAD only; Audio bucket: GET+PUT+HEAD only |
 | S3-L2 | `allowedHeaders: ["*"]` in CORS configuration | ✅ Fixed | Restricted to `Content-Type`, `Content-Length`, `x-amz-*` on both buckets |
 | S3-L3 | SSE-S3 encryption — limited audit vs SSE-KMS | ⬜ Open | Consider KMS for audio bucket (sensitive content) |
@@ -211,13 +211,13 @@ Individual review files (`code-review-*.md`) include per-issue **Status** lines 
 | WA-H5 | No Lambda Provisioned Concurrency for AI functions | ⬜ Open | No provisioned concurrency configuration |
 | WA-M1 | No deployment pipeline for non-Docker Lambdas | ⬜ Open | CodePipeline NOT extended |
 | WA-M2 | X-Ray tracing only on Python Lambdas | ✅ Fixed | `tracing: lambda.Tracing.ACTIVE` added to all Node.js Lambdas (handlers, authorizers, WebSocket, notification) |
-| WA-M3 | No DynamoDB Point-in-Time Recovery | ⬜ Open | PITR NOT enabled |
-| WA-M4 | DynamoDB tables use DESTROY removal policy | ⬜ Open | No environment-aware removal policies |
+| WA-M3 | No DynamoDB Point-in-Time Recovery | ✅ Fixed | PITR enabled on conversation and notification tables |
+| WA-M4 | DynamoDB tables use DESTROY removal policy | ✅ Fixed | Environment-aware: `RETAIN` for production, `DESTROY` for development |
 | WA-M5 | No S3 Intelligent Tiering on audio bucket | ⬜ Open | No lifecycle rules on audio bucket |
 | WA-M6 | No ECR image lifecycle policy | ⬜ Open | No lifecycle policy on ECR repositories |
 | WA-M7 | No cost allocation tags on CDK stacks | ✅ Fixed | `Project`, `Environment`, `ManagedBy` tags applied at app level in bin/cdk.ts |
 | WA-M8 | No data lifecycle strategy for conversation history | ⬜ Open | Define retention policy; add TTL or archival |
-| WA-L1 | API Gateway access logs retention ONE_WEEK | ⬜ Open | Increase to 30-90 days for audit capability |
+| WA-L1 | API Gateway access logs retention ONE_WEEK | ✅ Fixed | Increased to ONE_MONTH (30 days) |
 | WA-L2 | No health check endpoints | ⬜ Open | Add lightweight health check Lambda/endpoint |
 | WA-L3 | Lambda memory may be over-provisioned | ⬜ Open | Run Lambda Power Tuning analysis |
 | WA-L4 | VPC endpoints incur hourly charges | ⬜ Open | Evaluate cost vs security benefit for low-traffic |
