@@ -38,10 +38,20 @@ except ImportError:
         return (sanitized, False)
 
 
+def _is_anthropic_model(model_id: str) -> bool:
+    """Check if a model ID refers to an Anthropic model (direct or inference profile)."""
+    return model_id.startswith("anthropic.") or "anthropic" in model_id
+
+
+def _is_meta_model(model_id: str) -> bool:
+    """Check if a model ID refers to a Meta model (direct or inference profile)."""
+    return model_id.startswith("meta.") or "meta" in model_id
+
+
 def _build_invoke_request(llm: dict, system_prompt: str, user_prompt: str) -> dict:
     model_id = llm["model_id"]
 
-    if model_id.startswith("anthropic."):
+    if _is_anthropic_model(model_id):
         return {
             "anthropic_version": "bedrock-2023-05-31",
             "system": system_prompt,
@@ -56,7 +66,7 @@ def _build_invoke_request(llm: dict, system_prompt: str, user_prompt: str) -> di
             "top_p": llm["top_p"],
         }
 
-    if model_id.startswith("meta."):
+    if _is_meta_model(model_id):
         return {
             "prompt": f"{system_prompt}\n\n{user_prompt}",
             "max_gen_len": llm["max_tokens"],
@@ -68,11 +78,11 @@ def _build_invoke_request(llm: dict, system_prompt: str, user_prompt: str) -> di
 
 
 def _extract_response_text(model_id: str, response_payload: dict) -> str:
-    if model_id.startswith("anthropic."):
+    if _is_anthropic_model(model_id):
         content_blocks = response_payload.get("content", [])
         return "".join(block.get("text", "") for block in content_blocks if block.get("type") == "text")
 
-    if model_id.startswith("meta."):
+    if _is_meta_model(model_id):
         return response_payload.get("generation") or response_payload.get("output_text") or ""
 
     return response_payload.get("outputText") or ""
@@ -111,11 +121,11 @@ def _stream_invoke_model_text(llm: dict, system_prompt: str, user_prompt: str, s
             continue
 
         chunk_text = ""
-        if llm["model_id"].startswith("anthropic."):
+        if _is_anthropic_model(llm["model_id"]):
             event_type = event_payload.get("type")
             if event_type == "content_block_delta":
                 chunk_text = event_payload.get("delta", {}).get("text", "")
-        elif llm["model_id"].startswith("meta."):
+        elif _is_meta_model(llm["model_id"]):
             chunk_text = event_payload.get("generation") or event_payload.get("output_text") or ""
 
         if chunk_text:

@@ -41,8 +41,18 @@ BEDROCK_MAX_TOKENS = 512
 PLAYGROUND_TABLE_NAME = os.environ.get("PLAYGROUND_TABLE_NAME")
 
 
+def _is_anthropic_model(model_id: str) -> bool:
+    """Check if a model ID refers to an Anthropic model (direct or inference profile)."""
+    return model_id.startswith("anthropic.") or "anthropic" in model_id
+
+
+def _is_meta_model(model_id: str) -> bool:
+    """Check if a model ID refers to a Meta model (direct or inference profile)."""
+    return model_id.startswith("meta.") or "meta" in model_id
+
+
 def _build_invoke_body(model_id, system_instructions, human_context):
-    if model_id.startswith("anthropic."):
+    if _is_anthropic_model(model_id):
         return {
             "anthropic_version": "bedrock-2023-05-31",
             "system": system_instructions,
@@ -62,7 +72,7 @@ def _build_invoke_body(model_id, system_instructions, human_context):
             "top_p": BEDROCK_TOP_P,
         }
 
-    if model_id.startswith("meta."):
+    if _is_meta_model(model_id):
         return {
             "prompt": f"{system_instructions}\n\n{human_context}",
             "max_gen_len": BEDROCK_MAX_TOKENS,
@@ -76,12 +86,12 @@ def _build_invoke_body(model_id, system_instructions, human_context):
 def _extract_text_from_invoke_response(model_id, response):
     body = json.loads(response["body"].read())
 
-    if model_id.startswith("anthropic."):
+    if _is_anthropic_model(model_id):
         parts = body.get("content", [])
         text_parts = [part.get("text", "") for part in parts if part.get("type") == "text"]
         return "".join(text_parts)
 
-    if model_id.startswith("meta."):
+    if _is_meta_model(model_id):
         return body.get("generation") or body.get("output_text") or ""
 
     return body.get("outputText") or ""

@@ -32,8 +32,18 @@ except ImportError:
         return (sanitized, False)
 
 
+def _is_anthropic_model(model_id: str) -> bool:
+    """Check if a model ID refers to an Anthropic model (direct or inference profile)."""
+    return model_id.startswith("anthropic.") or "anthropic" in model_id
+
+
+def _is_meta_model(model_id: str) -> bool:
+    """Check if a model ID refers to a Meta model (direct or inference profile)."""
+    return model_id.startswith("meta.") or "meta" in model_id
+
+
 def _build_request_payload(model_id: str, prompt: str, temperature: float, max_tokens: int, top_p: Optional[float]) -> dict:
-    if model_id.startswith("anthropic."):
+    if _is_anthropic_model(model_id):
         return {
             "anthropic_version": "bedrock-2023-05-31",
             "messages": [{"role": "user", "content": [{"type": "text", "text": prompt}]}],
@@ -42,7 +52,7 @@ def _build_request_payload(model_id: str, prompt: str, temperature: float, max_t
             "top_p": top_p,
         }
 
-    if model_id.startswith("meta."):
+    if _is_meta_model(model_id):
         return {
             "prompt": prompt,
             "max_gen_len": max_tokens,
@@ -56,11 +66,11 @@ def _build_request_payload(model_id: str, prompt: str, temperature: float, max_t
 def _extract_response_text(model_id: str, invoke_response: dict) -> str:
     body = json.loads(invoke_response["body"].read())
 
-    if model_id.startswith("anthropic."):
+    if _is_anthropic_model(model_id):
         content_blocks = body.get("content", [])
         return "".join(block.get("text", "") for block in content_blocks if block.get("type") == "text")
 
-    if model_id.startswith("meta."):
+    if _is_meta_model(model_id):
         return body.get("generation") or body.get("output_text") or ""
 
     return body.get("outputText") or ""
