@@ -1,6 +1,7 @@
 import os
 import json
 import boto3
+import re
 import logging
 
 from botocore.exceptions import ClientError
@@ -13,6 +14,28 @@ logger = logging.getLogger(__name__)
 # AWS Clients
 dynamodb = boto3.client('dynamodb')
 bedrock_runtime = get_bedrock_runtime_client()
+
+try:
+    from bedrock_client.sanitizer import sanitize_prompt_input
+except ImportError:
+    def sanitize_prompt_input(user_input: str) -> tuple[str, bool]:
+        """Minimal inline sanitizer fallback."""
+        if not user_input:
+            return ("", False)
+        sanitized = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f\u200b-\u200f\u2028-\u2029\u202a-\u202e\u2060-\u2064\ufeff\ufff9-\ufffb]", "", user_input)
+        injection_patterns = [
+            r"(?i)\b(ignore|disregard|forget)\b.{0,30}\b(previous|above|prior|all)\b.{0,30}\b(instructions?|prompts?|rules?|context)\b",
+            r"(?i)\b(you are now|act as|pretend to be|assume the role|switch to|new role)\b",
+            r"(?i)\b(reveal|show|print|output|repeat|display)\b.{0,20}\b(system prompt|instructions|hidden|secret|internal)\b",
+            r"(?i)(```\s*(system|assistant|end|human)|<\/?system>|<\/?prompt>|\[INST\]|\[\/INST\]|<<SYS>>|<\/SYS>>)",
+            r"(?i)^\s*(system|assistant)\s*:",
+            r"(?i)\b(DAN|do anything now|jailbreak|bypass|override safety|ignore safety)\b",
+        ]
+        for pat in injection_patterns:
+            if re.search(pat, sanitized):
+                logger.warning("Prompt injection pattern detected in user input (first 100 chars): %.100s", sanitized)
+                return (sanitized, True)
+        return (sanitized, False)
 
 
 def _build_invoke_request(llm: dict, system_prompt: str, user_prompt: str) -> dict:
@@ -198,13 +221,21 @@ def generate_lawyer_summary(
     if not prompt_instruction:
         raise ValueError(f"Missing active summary prompt for block_type: {block_type}")
 
+    # Sanitize user-provided case context before interpolation into prompt
+    case_type_clean, ct_flag = sanitize_prompt_input(case_type or "")
+    case_description_clean, cd_flag = sanitize_prompt_input(case_description or "")
+    jurisdiction_clean, j_flag = sanitize_prompt_input(jurisdiction or "")
+
+    if any([ct_flag, cd_flag, j_flag]):
+        logger.warning("Prompt injection pattern detected in case context for summary generation")
+
     system_prompt = f"""
 {prompt_instruction}
 
 --- CASE METADATA ---
-Case Type: {case_type or 'Not Specified'}
-Case Description: {case_description or 'No additional description provided'}
-Jurisdiction: {jurisdiction or 'Not Specified'}
+Case Type: {case_type_clean or 'Not Specified'}
+Case Description: {case_description_clean or 'No additional description provided'}
+Jurisdiction: {jurisdiction_clean or 'Not Specified'}
 
 --- CRITICAL OUTPUT INSTRUCTIONS ---
 - Respond with ONLY the summary content in markdown format.
@@ -250,13 +281,21 @@ def generate_lawyer_summary_streaming(
     if not prompt_instruction:
         raise ValueError(f"Missing active summary prompt for block_type: {block_type}")
 
+    # Sanitize user-provided case context before interpolation into prompt
+    case_type_clean, ct_flag = sanitize_prompt_input(case_type or "")
+    case_description_clean, cd_flag = sanitize_prompt_input(case_description or "")
+    jurisdiction_clean, j_flag = sanitize_prompt_input(jurisdiction or "")
+
+    if any([ct_flag, cd_flag, j_flag]):
+        logger.warning("Prompt injection pattern detected in case context for streaming summary generation")
+
     system_prompt = f"""
 {prompt_instruction}
 
 --- CASE METADATA ---
-Case Type: {case_type or 'Not Specified'}
-Case Description: {case_description or 'No additional description provided'}
-Jurisdiction: {jurisdiction or 'Not Specified'}
+Case Type: {case_type_clean or 'Not Specified'}
+Case Description: {case_description_clean or 'No additional description provided'}
+Jurisdiction: {jurisdiction_clean or 'Not Specified'}
 
 --- CRITICAL OUTPUT INSTRUCTIONS ---
 - Respond with ONLY the summary content in markdown format.
