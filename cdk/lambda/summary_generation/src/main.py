@@ -741,6 +741,10 @@ def handler(event, context):
             logger.error(f"Error retrieving dynamo history: {e}")
             return _error_response(500, 'An unexpected error occurred. Please try again later or contact an administrator.', is_websocket, connection_id, ws_endpoint, request_id, event=event)
         
+        if not conversation_history or not conversation_history.strip():
+            logger.warning(f"No conversation history found for session_id: {session_id}")
+            return _error_response(400, 'No conversation history found for this block. Please have a conversation in the interview assistant first before generating a summary.', is_websocket, connection_id, ws_endpoint, request_id, event=event)
+
         try:
             logger.info("Generating response from the LLM.")
             if is_websocket and connection_id:
