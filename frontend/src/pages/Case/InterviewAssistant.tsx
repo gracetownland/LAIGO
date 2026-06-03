@@ -20,6 +20,7 @@ import AiResponse from "../../components/Chat/AIResponse";
 import ChatBar from "../../components/Chat/ChatBar";
 import type { CaseOutletContext } from "./CaseLayout";
 import { useWebSocket } from "../../hooks/useWebSocket";
+import { readApiErrorMessage } from "../../utils/apiError";
 import type { WebSocketMessage } from "../../types/websocket";
 import ThinkingIndicator from "../../components/Chat/ThinkingIndicator";
 import { useUser } from "../../contexts/UserContext";
@@ -375,9 +376,20 @@ const InterviewAssistant: React.FC = () => {
           },
           onComplete: () => {
             setIsGeneratingSummary(false);
+            setSnackbarMessage(
+              "Summary generated. Open Case Summaries to review it.",
+            );
+            setSnackbarSeverity("success");
+            setShowSnackbar(true);
           },
-          onError: () => {
+          onError: (msg) => {
             setIsGeneratingSummary(false);
+            setSnackbarMessage(
+              msg ||
+                "Summary generation failed. Chat first in this stage, then try again.",
+            );
+            setSnackbarSeverity("error");
+            setShowSnackbar(true);
           },
         },
       );
@@ -407,9 +419,26 @@ const InterviewAssistant: React.FC = () => {
       );
 
       if (response.ok) {
+        setSnackbarMessage(
+          "Summary generated. Open Case Summaries to review it.",
+        );
+        setSnackbarSeverity("success");
+        setShowSnackbar(true);
       } else {
+        const message = await readApiErrorMessage(
+          response,
+          "Summary generation failed. Chat first in this stage, then try again.",
+        );
+        setSnackbarMessage(message);
+        setSnackbarSeverity("error");
+        setShowSnackbar(true);
       }
     } catch {
+      setSnackbarMessage(
+        "Summary generation failed. Please try again in a moment.",
+      );
+      setSnackbarSeverity("error");
+      setShowSnackbar(true);
     } finally {
       setIsGeneratingSummary(false);
     }
