@@ -51,3 +51,6 @@ temp/
 
 # AWS credentials (never commit)
 .aws/
+
+# Deployment artifacts
+*.zip
