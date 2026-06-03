@@ -53,8 +53,14 @@ def _build_request_payload(model_id: str, prompt: str, temperature: float, max_t
         }
 
     if _is_meta_model(model_id):
+        # Llama 3 requires special chat template tokens for instruction following
+        formatted_prompt = (
+            f"<|begin_of_text|><|start_header_id|>user<|end_header_id|>\n\n"
+            f"{prompt}<|eot_id|>"
+            f"<|start_header_id|>assistant<|end_header_id|>\n\n"
+        )
         return {
-            "prompt": prompt,
+            "prompt": formatted_prompt,
             "max_gen_len": max_tokens,
             "temperature": temperature,
             "top_p": top_p,

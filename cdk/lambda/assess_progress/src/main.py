@@ -73,8 +73,16 @@ def _build_invoke_body(model_id, system_instructions, human_context):
         }
 
     if _is_meta_model(model_id):
+        # Llama 3 requires special chat template tokens for instruction following
+        formatted_prompt = (
+            f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n"
+            f"{system_instructions}<|eot_id|>"
+            f"<|start_header_id|>user<|end_header_id|>\n\n"
+            f"{human_context}<|eot_id|>"
+            f"<|start_header_id|>assistant<|end_header_id|>\n\n"
+        )
         return {
-            "prompt": f"{system_instructions}\n\n{human_context}",
+            "prompt": formatted_prompt,
             "max_gen_len": BEDROCK_MAX_TOKENS,
             "temperature": BEDROCK_TEMP,
             "top_p": BEDROCK_TOP_P,

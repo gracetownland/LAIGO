@@ -5,15 +5,29 @@ import re
 import logging
 
 from botocore.exceptions import ClientError
-from bedrock_client import get_bedrock_runtime_client
+from botocore.config import Config
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Inline Bedrock client (bedrock_client layer not available for this function)
+_BEDROCK_RETRY_CONFIG = Config(
+    retries={"mode": "adaptive", "max_attempts": 5},
+    read_timeout=120,
+    connect_timeout=10,
+)
+
+def _get_bedrock_runtime_client(region_name=None):
+    kwargs = {"config": _BEDROCK_RETRY_CONFIG}
+    if region_name:
+        kwargs["region_name"] = region_name
+    return boto3.client("bedrock-runtime", **kwargs)
+
 # AWS Clients
 dynamodb = boto3.client('dynamodb')
-bedrock_runtime = get_bedrock_runtime_client()
+_REGION = os.environ.get("REGION")
+bedrock_runtime = _get_bedrock_runtime_client(region_name=_REGION)
 
 try:
     from bedrock_client.sanitizer import sanitize_prompt_input
@@ -67,8 +81,16 @@ def _build_invoke_request(llm: dict, system_prompt: str, user_prompt: str) -> di
         }
 
     if _is_meta_model(model_id):
+        # Llama 3 requires special chat template tokens for instruction following
+        formatted_prompt = (
+            f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n"
+            f"{system_prompt}<|eot_id|>"
+            f"<|start_header_id|>user<|end_header_id|>\n\n"
+            f"{user_prompt}<|eot_id|>"
+            f"<|start_header_id|>assistant<|end_header_id|>\n\n"
+        )
         return {
-            "prompt": f"{system_prompt}\n\n{user_prompt}",
+            "prompt": formatted_prompt,
             "max_gen_len": llm["max_tokens"],
             "temperature": llm["temperature"],
             "top_p": llm["top_p"],
@@ -83,13 +105,19 @@ def _extract_response_text(model_id: str, response_payload: dict) -> str:
         return "".join(block.get("text", "") for block in content_blocks if block.get("type") == "text")
 
     if _is_meta_model(model_id):
-        return response_payload.get("generation") or response_payload.get("output_text") or ""
+        return (
+            response_payload.get("generation")
+            or response_payload.get("output_text")
+            or response_payload.get("outputText")
+            or ""
+        )
 
-    return response_payload.get("outputText") or ""
+    return response_payload.get("outputText") or response_payload.get("generation") or ""
 
 
 def _invoke_model_text(llm: dict, system_prompt: str, user_prompt: str) -> str:
     request_body = _build_invoke_request(llm, system_prompt, user_prompt)
+    logger.info(f"Invoking model (non-streaming): {llm['model_id']}, prompt length: {len(user_prompt)}")
     response = bedrock_runtime.invoke_model(
         modelId=llm["model_id"],
         contentType="application/json",
@@ -97,7 +125,11 @@ def _invoke_model_text(llm: dict, system_prompt: str, user_prompt: str) -> str:
         body=json.dumps(request_body),
     )
     payload = json.loads(response["body"].read())
-    return _extract_response_text(llm["model_id"], payload)
+    result = _extract_response_text(llm["model_id"], payload)
+    logger.info(f"Model response length: {len(result)}, first 200 chars: {result[:200]}")
+    if not result:
+        logger.warning(f"Empty model response. Payload keys: {list(payload.keys())}, payload preview: {json.dumps(payload)[:500]}")
+    return result
 
 
 def _stream_invoke_model_text(llm: dict, system_prompt: str, user_prompt: str, send_chunk_callback=None) -> str:
@@ -113,11 +145,24 @@ def _stream_invoke_model_text(llm: dict, system_prompt: str, user_prompt: str, s
     for event in stream.get("body", []):
         chunk = event.get("chunk")
         if not chunk:
+            for error_key in (
+                "internalServerException",
+                "modelStreamErrorException",
+                "validationException",
+                "throttlingException",
+                "modelTimeoutException",
+                "serviceUnavailableException",
+            ):
+                if error_key in event:
+                    error_detail = event[error_key]
+                    message = error_detail.get("message") if isinstance(error_detail, dict) else str(error_detail)
+                    raise RuntimeError(f"Bedrock stream error ({error_key}): {message}")
             continue
 
         try:
             event_payload = json.loads(chunk["bytes"].decode("utf-8"))
-        except Exception:
+        except Exception as parse_error:
+            logger.warning(f"Failed to parse Bedrock stream chunk: {parse_error}")
             continue
 
         chunk_text = ""
@@ -126,7 +171,12 @@ def _stream_invoke_model_text(llm: dict, system_prompt: str, user_prompt: str, s
             if event_type == "content_block_delta":
                 chunk_text = event_payload.get("delta", {}).get("text", "")
         elif _is_meta_model(llm["model_id"]):
-            chunk_text = event_payload.get("generation") or event_payload.get("output_text") or ""
+            chunk_text = (
+                event_payload.get("generation")
+                or event_payload.get("output_text")
+                or event_payload.get("outputText")
+                or ""
+            )
 
         if chunk_text:
             full_response += chunk_text
@@ -349,8 +399,8 @@ def generate_full_case_summary(
         str: Synthesized full-case summary.
     """
     # Format the input summaries for the prompt
-    summaries_text = "\\n\\n".join([
-        f"--- SECTION: {item['title']} ({item['block_type']}) ---\\n{item['content']}"
+    summaries_text = "\n\n".join([
+        f"--- SECTION: {item['title']} ({item['block_type']}) ---\n{item['content']}"
         for item in block_summaries
     ])
 
@@ -393,8 +443,8 @@ def generate_full_case_summary_streaming(
         str: Synthesized full-case summary.
     """
     # Format the input summaries for the prompt
-    summaries_text = "\\n\\n".join([
-        f"--- SECTION: {item['title']} ({item['block_type']}) ---\\n{item['content']}"
+    summaries_text = "\n\n".join([
+        f"--- SECTION: {item['title']} ({item['block_type']}) ---\n{item['content']}"
         for item in block_summaries
     ])
 

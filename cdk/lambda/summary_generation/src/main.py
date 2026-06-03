@@ -7,14 +7,26 @@ import uuid
 from datetime import datetime
 import psycopg
 from botocore.exceptions import ClientError
-from bedrock_client import get_bedrock_runtime_client
+from botocore.config import Config
+
+# Create Bedrock client inline (bedrock_client layer not available for this function)
+_BEDROCK_RETRY_CONFIG = Config(
+    retries={"mode": "adaptive", "max_attempts": 5},
+    read_timeout=120,
+    connect_timeout=10,
+)
+
+def _get_bedrock_runtime_client(region_name=None):
+    kwargs = {"config": _BEDROCK_RETRY_CONFIG}
+    if region_name:
+        kwargs["region_name"] = region_name
+    return boto3.client("bedrock-runtime", **kwargs)
+
 from helpers.chat import (
-    get_bedrock_llm, 
-    generate_lawyer_summary, 
-    generate_lawyer_summary_streaming,
-    retrieve_dynamodb_history, 
+    get_bedrock_llm,
+    generate_lawyer_summary,
+    retrieve_dynamodb_history,
     generate_full_case_summary,
-    generate_full_case_summary_streaming
 )
 from aws_lambda_powertools import Logger, Metrics
 from aws_lambda_powertools.metrics import MetricUnit
@@ -36,7 +48,7 @@ BEDROCK_MAX_TOKENS_PARAM = os.environ.get("BEDROCK_MAX_TOKENS_PARAM")
 # AWS Clients
 secrets_manager_client = boto3.client("secretsmanager")
 ssm_client = boto3.client("ssm", region_name=REGION)
-bedrock_runtime = get_bedrock_runtime_client(region_name=REGION)
+bedrock_runtime = _get_bedrock_runtime_client(region_name=REGION)
 eventbridge_client = boto3.client("events", region_name=REGION)
 
 # Cached resources
@@ -245,7 +257,35 @@ def _error_response(status_code, message, is_websocket=False, connection_id=None
     if is_websocket and connection_id:
         send_to_websocket(connection_id, ws_endpoint, request_id, "error", content=message)
         return {"statusCode": status_code}
-    return create_response(status_code, message, event)
+    return create_response(status_code, {"error": message}, event)
+
+
+def _require_non_empty_summary(body: str) -> str:
+    """Reject empty model output before persisting a summary record."""
+    text = (body or "").strip()
+    if not text:
+        raise ValueError("Summary generation returned empty content from the model")
+    return text
+
+
+def _finalize_summary_response(
+    body: str,
+    is_websocket: bool,
+    connection_id,
+    ws_endpoint,
+    request_id,
+) -> str:
+    """
+    Validate model output, append disclaimer, and optionally push chunks to WebSocket.
+
+    Uses non-streaming Bedrock output for reliability; WebSocket clients still receive
+    start/chunk/complete events without depending on invoke_model_with_response_stream.
+    """
+    summary_body = _require_non_empty_summary(body)
+    if is_websocket and connection_id:
+        send_to_websocket(connection_id, ws_endpoint, request_id, "chunk", content=summary_body)
+        send_to_websocket(connection_id, ws_endpoint, request_id, "chunk", content=DISCLAIMER)
+    return summary_body + DISCLAIMER
 
 
 def get_case_details(case_id):
@@ -656,35 +696,35 @@ def handler(event, context):
         logger.info(f"Requested full-case blocks: {FULL_CASE_BLOCK_TYPES}")
         logger.info(f"Found {len(block_summaries)} block summaries to synthesize.")
 
-        # 2. Generate full case summary
+        # 2. Generate full case summary (always non-streaming for reliable model output)
         try:
-            if is_websocket and connection_id:
-                # Streaming mode
-                def send_chunk(chunk_content):
-                    send_to_websocket(connection_id, ws_endpoint, request_id, "chunk", content=chunk_content)
-                
-                response = generate_full_case_summary_streaming(
-                    block_summaries=block_summaries,
-                    llm=llm,
-                    prompt_instruction=full_case_prompt,
-                    case_type=case_type,
-                    case_description=case_description,
-                    jurisdiction=jurisdiction,
-                    send_chunk_callback=send_chunk
-                )
-                send_chunk(DISCLAIMER)
-                response += DISCLAIMER
-            else:
-                # Non-streaming mode (HTTP)
-                response = generate_full_case_summary(
-                    block_summaries=block_summaries,
-                    llm=llm,
-                    prompt_instruction=full_case_prompt,
-                    case_type=case_type,
-                    case_description=case_description,
-                    jurisdiction=jurisdiction
-                )
-                response += DISCLAIMER
+            response = generate_full_case_summary(
+                block_summaries=block_summaries,
+                llm=llm,
+                prompt_instruction=full_case_prompt,
+                case_type=case_type,
+                case_description=case_description,
+                jurisdiction=jurisdiction,
+            )
+            response = _finalize_summary_response(
+                response,
+                is_websocket,
+                connection_id,
+                ws_endpoint,
+                request_id,
+            )
+        except ValueError as e:
+            logger.error(f"Full case summary was empty or invalid: {e}")
+            publish_notification_event("full-case", case_id, user_id, success=False, error_message=str(e))
+            return _error_response(
+                500,
+                "Summary generation produced no content. Please try again after more conversation in the interview assistant.",
+                is_websocket,
+                connection_id,
+                ws_endpoint,
+                request_id,
+                event=event,
+            )
         except Exception as e:
             logger.error(f"Error generating full case summary: {e}")
             publish_notification_event("full-case", case_id, user_id, success=False, error_message=str(e))
@@ -692,7 +732,8 @@ def handler(event, context):
 
         # 3. Save summary
         try:
-            update_summaries(case_id, response, None, scope='full_case')
+            if not update_summaries(case_id, response, None, scope='full_case'):
+                raise RuntimeError("Failed to persist summary to database")
         except Exception as e:
             logger.error(f"Error saving full case summary: {e}")
             publish_notification_event("full-case", case_id, user_id, success=False, error_message=str(e))
@@ -747,35 +788,34 @@ def handler(event, context):
 
         try:
             logger.info("Generating response from the LLM.")
-            if is_websocket and connection_id:
-                # Streaming mode
-                def send_chunk(chunk_content):
-                    send_to_websocket(connection_id, ws_endpoint, request_id, "chunk", content=chunk_content)
-                
-                response = generate_lawyer_summary_streaming(
-                    conversation_history=conversation_history,
-                    llm=llm,
-                    prompt_instruction=summary_prompt,
-                    case_type=case_type,
-                    case_description=case_description,
-                    jurisdiction=jurisdiction,
-                    block_type=block_type,
-                    send_chunk_callback=send_chunk
-                )
-                send_chunk(DISCLAIMER)
-                response += DISCLAIMER
-            else:
-                # Non-streaming mode (HTTP)
-                response = generate_lawyer_summary(
-                    conversation_history=conversation_history,
-                    llm=llm,
-                    prompt_instruction=summary_prompt,
-                    case_type=case_type,
-                    case_description=case_description,
-                    jurisdiction=jurisdiction,
-                    block_type=block_type
-                )
-                response += DISCLAIMER
+            response = generate_lawyer_summary(
+                conversation_history=conversation_history,
+                llm=llm,
+                prompt_instruction=summary_prompt,
+                case_type=case_type,
+                case_description=case_description,
+                jurisdiction=jurisdiction,
+                block_type=block_type,
+            )
+            response = _finalize_summary_response(
+                response,
+                is_websocket,
+                connection_id,
+                ws_endpoint,
+                request_id,
+            )
+        except ValueError as e:
+            logger.error(f"Block summary was empty or invalid for {block_type}: {e}")
+            publish_notification_event(sub_route, case_id, user_id, success=False, error_message=str(e))
+            return _error_response(
+                500,
+                "Summary generation produced no content. Please try again after more conversation in the interview assistant.",
+                is_websocket,
+                connection_id,
+                ws_endpoint,
+                request_id,
+                event=event,
+            )
         except Exception as e:
             logger.error(f"Error getting response: {e}")
             publish_notification_event(sub_route, case_id, user_id, success=False, error_message=str(e))
@@ -784,7 +824,8 @@ def handler(event, context):
         try:
             logger.info(f"Updating case summary for block_type: {block_type}")
             # Note: scope defaults to 'block'
-            update_summaries(case_id, response, block_type, scope='block')
+            if not update_summaries(case_id, response, block_type, scope='block'):
+                raise RuntimeError("Failed to persist summary to database")
         except Exception as e:
             logger.error(f"Error updating case summary: {e}")
             publish_notification_event(sub_route, case_id, user_id, success=False, error_message=str(e))
