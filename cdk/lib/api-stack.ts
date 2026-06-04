@@ -8,7 +8,6 @@ import * as ec2 from "aws-cdk-lib/aws-ec2";
 import { Construct } from "constructs";
 import { Duration } from "aws-cdk-lib";
 import * as wafv2 from "aws-cdk-lib/aws-wafv2";
-import { Code, LayerVersion, Runtime } from "aws-cdk-lib/aws-lambda";
 import * as cognito from "aws-cdk-lib/aws-cognito";
 import { VpcStack } from "./vpc-stack";
 import { DatabaseStack } from "./database-stack";
@@ -19,11 +18,8 @@ import * as s3 from "aws-cdk-lib/aws-s3";
 import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
 import * as ssm from "aws-cdk-lib/aws-ssm";
 import * as logs from "aws-cdk-lib/aws-logs";
-import * as codebuild from "aws-cdk-lib/aws-codebuild";
 import * as ecr from "aws-cdk-lib/aws-ecr";
-import * as lambdaEventSources from "aws-cdk-lib/aws-lambda-event-sources";
 import * as bedrock from "aws-cdk-lib/aws-bedrock";
-import * as sqs from "aws-cdk-lib/aws-sqs";
 import * as apigwv2 from "aws-cdk-lib/aws-apigatewayv2";
 import { WebSocketLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
 import { WebSocketLambdaAuthorizer } from "aws-cdk-lib/aws-apigatewayv2-authorizers";
@@ -1308,7 +1304,7 @@ export class ApiGatewayStack extends cdk.Stack {
     // Email Whitelist table for signup access control
     // Partition key: email. Stores canonical_role (student/instructor/admin) and uploaded_label.
     // RETAIN on delete to prevent accidental data loss.
-    const emailWhitelistTable = new dynamodb.Table(
+    new dynamodb.Table(
       this,
       `${id}-EmailWhitelistTable`,
       {
@@ -1369,7 +1365,7 @@ export class ApiGatewayStack extends cdk.Stack {
     this.whitelistUploadBucketName = whitelistUploadBucket.bucketName;
 
     // SSM parameter to control signup mode: 'public' (default) or 'whitelist'
-    const signupModeParameter = new ssm.StringParameter(
+    new ssm.StringParameter(
       this,
       "SignupModeParameter",
       {
@@ -2527,7 +2523,7 @@ export class ApiGatewayStack extends cdk.Stack {
     );
 
     // Create EventBridge rule for notification events
-    const notificationRule = new events.Rule(this, `${id}-NotificationRule`, {
+    new events.Rule(this, `${id}-NotificationRule`, {
       eventBus: notificationEventBus,
       eventPattern: {
         source: ["notification.system"],

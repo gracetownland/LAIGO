@@ -4,7 +4,6 @@ const {
   QueryCommand,
   UpdateItemCommand,
   DeleteItemCommand,
-  BatchWriteItemCommand,
 } = require("@aws-sdk/client-dynamodb");
 const {
   ApiGatewayManagementApiClient,

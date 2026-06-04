@@ -2,13 +2,7 @@ import { Stack, StackProps } from "aws-cdk-lib";
 import * as cdk from "aws-cdk-lib";
 import { Construct } from "constructs";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
-import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
 import { Fn } from "aws-cdk-lib";
-import {
-  AwsCustomResource,
-  AwsCustomResourcePolicy,
-  PhysicalResourceId,
-} from "aws-cdk-lib/custom-resources";
 import { applyStandardTags } from "./shared/tagging";
 
 export class VpcStack extends Stack {
@@ -165,13 +159,6 @@ export class VpcStack extends Stack {
       });
 
       this.vpc.addFlowLog(`${id}-vpcFlowLog`);
-
-      // Get default security group for VPC
-      const defaultSecurityGroup = ec2.SecurityGroup.fromSecurityGroupId(
-        this,
-        id,
-        this.vpc.vpcDefaultSecurityGroup
-      );
     } else {
       // Allow users to specify custom CIDR via CDK context, otherwise use default
       this.vpcCidrString = this.node.tryGetContext('vpcCidr') || "10.0.0.0/16";

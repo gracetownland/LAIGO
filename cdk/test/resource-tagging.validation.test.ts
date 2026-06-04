@@ -1,11 +1,4 @@
-import * as cdk from "aws-cdk-lib";
-import { Annotations, Match } from "aws-cdk-lib/assertions";
-import {
-  applyGlobalTags,
-  applyStandardTags,
-  TagValidationAspect,
-  REQUIRED_TAG_KEYS,
-} from "../lib/shared/tagging";
+import { TagValidationAspect } from "../lib/shared/tagging";
 
 describe("Resource Tagging - Validation Tests", () => {
   // TODO: Task 6.4 will implement validation aspect tests

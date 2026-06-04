@@ -1,6 +1,6 @@
 import * as cdk from "aws-cdk-lib";
 import * as ecr from "aws-cdk-lib/aws-ecr";
-import { Match, Template } from "aws-cdk-lib/assertions";
+import { Template } from "aws-cdk-lib/assertions";
 import { ApiGatewayStack } from "../lib/api-stack";
 import { DatabaseStack } from "../lib/database-stack";
 import { VpcStack } from "../lib/vpc-stack";

@@ -1,8 +1,4 @@
-import * as cdk from "aws-cdk-lib";
-import { Template } from "aws-cdk-lib/assertions";
 import {
-  applyGlobalTags,
-  applyStandardTags,
   REQUIRED_TAG_KEYS,
   VALID_COMPONENTS,
 } from "../lib/shared/tagging";

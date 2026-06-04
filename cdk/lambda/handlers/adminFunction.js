@@ -1376,7 +1376,6 @@ const routes = {
         }
 
         const userRoles = existingUser[0].roles;
-        const userId = existingUser[0].user_id;
 
         // Check if the user is already an instructor or admin
         if (userRoles.includes("instructor") || userRoles.includes("admin")) {
@@ -1431,7 +1430,6 @@ const routes = {
                   `;
 
         const userRoles = userRoleData[0]?.roles;
-        const userId = userRoleData[0]?.user_id;
 
         if (!userRoles || !userRoles.includes("instructor")) {
           response.statusCode = 400;
@@ -1494,7 +1492,6 @@ const routes = {
               `;
 
         const userRoles = userRoleData[0]?.roles;
-        const userId = userRoleData[0]?.user_id;
 
         if (!userRoles || !userRoles.includes("instructor")) {
           response.statusCode = 400;

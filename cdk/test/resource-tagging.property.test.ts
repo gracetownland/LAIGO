@@ -1,14 +1,4 @@
 import * as fc from "fast-check";
-import * as cdk from "aws-cdk-lib";
-import {
-  applyGlobalTags,
-  applyStandardTags,
-  validateTagValue,
-  TagValidationAspect,
-  REQUIRED_TAG_KEYS,
-  VALID_COMPONENTS,
-  TAG_VALUE_RULES,
-} from "../lib/shared/tagging";
 
 describe("Resource Tagging - Property Tests", () => {
   // TODO: Task 7.1 - Property 1: Context parameter pass-through
