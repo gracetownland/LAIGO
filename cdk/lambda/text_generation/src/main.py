@@ -321,7 +321,7 @@ def get_case_details(case_id):
         if cur:
             cur.close()
         connection.rollback()
-        return None, None, None, None
+        return None, None, None, None, None, None
 
 
 @metrics.log_metrics(capture_cold_start_metric=True)
