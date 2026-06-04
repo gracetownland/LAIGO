@@ -1994,7 +1994,6 @@ exports.handler = async (event, context) => {
     roles,
   };
 
-  let data;
   try {
     const pathData = event.httpMethod + " " + event.resource;
     const env = {

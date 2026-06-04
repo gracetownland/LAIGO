@@ -1595,7 +1595,6 @@ exports.handler = async (event, context) => {
   const user_id = user.user_id;
   const userEmail = user.email;
 
-  let data;
   try {
     const pathData = event.httpMethod + " " + event.resource;
     const env = {
