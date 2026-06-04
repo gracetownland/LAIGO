@@ -1,5 +1,4 @@
 import logging
-import boto3
 import json
 import re
 from typing import Optional
