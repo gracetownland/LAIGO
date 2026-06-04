@@ -1070,65 +1070,6 @@ const routes = {
       handleError(err, response);
     }
   },
-  "GET /admin/message_limit": async (event, env) => {
-    const { response, user, user_id, sqlConnection } = env;
-    try {
-      console.log("Message limit name:", process.env.MESSAGE_LIMIT);
-      const { SSMClient, GetParameterCommand } =
-        await import("@aws-sdk/client-ssm");
-
-      const ssm = new SSMClient();
-
-      console.log("Fetching admin message limit from SSM...");
-      const result = await ssm.send(
-        new GetParameterCommand({ Name: process.env.MESSAGE_LIMIT }),
-      );
-
-      console.log("✅ Admin message limit fetched:", result.Parameter.Value);
-
-      response.statusCode = 200;
-      response.body = JSON.stringify({ value: result.Parameter.Value });
-    } catch (err) {
-      console.error("❌ Failed to fetch message limit:", err);
-      handleError(err, response);
-    }
-  },
-  "POST /admin/message_limit": async (event, env) => {
-    const { response, user, user_id, sqlConnection } = env;
-    try {
-      const { SSMClient, PutParameterCommand } =
-        await import("@aws-sdk/client-ssm");
-      const ssm = new SSMClient();
-
-      const body = parseBody(event.body);
-      const newValue = body?.value;
-
-      if (typeof newValue !== "string" && typeof newValue !== "number") {
-        response.statusCode = 400;
-        response.body = JSON.stringify({
-          error: "Missing or invalid 'value' in request body",
-        });
-        return;
-      }
-
-      await ssm.send(
-        new PutParameterCommand({
-          Name: process.env.MESSAGE_LIMIT,
-          Value: String(newValue),
-          Overwrite: true,
-          Type: "String",
-        }),
-      );
-
-      console.log("✅ Message limit updated successfully.");
-
-      response.statusCode = 200;
-      response.body = JSON.stringify({ success: true, value: newValue });
-    } catch (err) {
-      console.error("❌ Failed to update message limit:", err);
-      handleError(err, response);
-    }
-  },
   "GET /admin/file_size_limit": async (event, env) => {
     const { response, user, user_id, sqlConnection } = env;
     try {
