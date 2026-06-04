@@ -252,18 +252,6 @@ def _handle_guardrail_error(resp, event=None):
     )
 
 
-# def handler(event, context):
-#     logger.info("Lambda function called!")
-#     action = event.get("queryStringParameters", {}).get("action")
-
-#     if action == "new_case":
-#         return handle_new_case(event)
-#     elif action == "generate_title":
-#         return handle_generate_title(event)
-#     else:
-#         return _response(400, {"error": "Missing or invalid 'action' query parameter"})
-
-
 @metrics.log_metrics(capture_cold_start_metric=True)
 @logger.inject_lambda_context(log_event=True)
 def handler(event, context):
