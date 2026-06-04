@@ -1,15 +1,11 @@
 import os
 import json
 import boto3
-import botocore
 import logging
 import psycopg
-import time
-import uuid
 import functools
 from aws_lambda_powertools import Logger, Metrics
 from bedrock_client import get_bedrock_runtime_client
-from aws_lambda_powertools.metrics import MetricUnit
 
 from helpers.chat import get_bedrock_llm, get_initial_student_query, get_response, get_streaming_response
 from helpers.usage import check_and_increment_usage

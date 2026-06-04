@@ -1,7 +1,6 @@
 import os
 import json
 import boto3
-import logging
 import uuid
 from aws_lambda_powertools import Logger
 from bedrock_client import get_bedrock_runtime_client

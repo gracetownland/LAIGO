@@ -1,15 +1,11 @@
 import os
 import json
-import logging
 import hashlib
 import base64
 import uuid
-import time
 import boto3
 import psycopg
-from botocore.exceptions import ClientError
 from aws_lambda_powertools import Logger, Metrics
-from aws_lambda_powertools.metrics import MetricUnit
 from bedrock_client import get_bedrock_runtime_client
 
 from helpers.chat import get_bedrock_llm, get_response

@@ -1,12 +1,7 @@
 import os
 import json
 import boto3
-import logging
-import hashlib
-import uuid
-from datetime import datetime
 import psycopg
-from botocore.exceptions import ClientError
 from botocore.config import Config
 
 # Create Bedrock client inline (bedrock_client layer not available for this function)
@@ -29,7 +24,6 @@ from helpers.chat import (
     generate_full_case_summary,
 )
 from aws_lambda_powertools import Logger, Metrics
-from aws_lambda_powertools.metrics import MetricUnit
 
 # Set up logging and metrics for the Lambda function
 logger = Logger(service="SummaryGeneration")

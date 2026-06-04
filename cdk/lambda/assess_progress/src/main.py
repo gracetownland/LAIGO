@@ -1,13 +1,11 @@
 import os
 import json
 import boto3
-import logging
 import psycopg
 import time
 import re
 from botocore.exceptions import ClientError
 from aws_lambda_powertools import Logger, Metrics
-from aws_lambda_powertools.metrics import MetricUnit
 from bedrock_client import get_bedrock_runtime_client
 
 # Set up logging and metrics for the Lambda function
