@@ -153,8 +153,8 @@ def _try_parse_assessment_json(response_text):
         pass
 
     # 2) Strip markdown code fences and retry.
-    fenced = re.sub(r"^```(?:json)?\\s*", "", text, flags=re.IGNORECASE)
-    fenced = re.sub(r"\\s*```$", "", fenced)
+    fenced = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
+    fenced = re.sub(r"\s*```$", "", fenced)
     if fenced != text:
         try:
             parsed = json.loads(fenced.strip())
@@ -174,8 +174,8 @@ def _try_parse_assessment_json(response_text):
             pass
 
     # 4) Last resort: regex extraction for near-JSON outputs.
-    progress_match = re.search(r'"?progress"?\\s*[:=]\\s*([0-9]+)', text, flags=re.IGNORECASE)
-    reasoning_match = re.search(r'"?reasoning"?\\s*[:=]\\s*"([\\s\\S]*?)"', text, flags=re.IGNORECASE)
+    progress_match = re.search(r'"?progress"?\s*[:=]\s*([0-9]+)', text, flags=re.IGNORECASE)
+    reasoning_match = re.search(r'"?reasoning"?\s*[:=]\s*"([\s\S]*?)"', text, flags=re.IGNORECASE)
     if progress_match and reasoning_match:
         try:
             parsed = {
