@@ -389,10 +389,10 @@ def handle_generate_title(case_id: str, case_type: str, jurisdiction: str, case_
         )
         response = get_response(
             case_type=case_type,
+            llm=llm,
             jurisdiction=jurisdiction,
             case_description=case_description,
-            province=province,
-            llm=llm
+            province=province
         )
         update_title(case_id, capitalize_title(response))
         return response
