@@ -428,14 +428,12 @@ def handler(event, context):
             case_title = body.get("case_title")
             case_id = body.get("case_id")
             user_id = event.get("userId")  # Database user_id from default.js (already translated at boundary)
-            cognito_token = None  # Not needed for WebSocket mode
         else:
             # HTTP: parameters come from query string
             qs = event.get("queryStringParameters") or {}
             file_name = qs.get("file_name")
             audio_file_id = qs.get("audio_file_id")
             file_type = qs.get("file_type", "mp3").lower()
-            cognito_token = qs.get("cognito_token")
             case_title = qs.get("case_title")
             case_id = qs.get("case_id")
             user_id = request_context.get("authorizer", {}).get("principalId")

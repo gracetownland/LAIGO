@@ -341,7 +341,6 @@ def handler(event, context):
     query_params = event.get("queryStringParameters", {}) or {}
     case_id = query_params.get("case_id", "")
     sub_route = query_params.get("sub_route", "intake-facts") # Default to intake-facts if missing
-    playground_mode = query_params.get("playground_mode", "false").lower() == "true"
 
     # Map sub_route to block_type enum
     subroute_map = {
@@ -529,7 +528,7 @@ def handler(event, context):
             if not websocket_endpoint:
                 websocket_endpoint = f"https://{domain_name}/{stage}"
             
-            response = get_streaming_response(
+            get_streaming_response(
                 query=student_query,
                 province=province,
                 statute=statute,
