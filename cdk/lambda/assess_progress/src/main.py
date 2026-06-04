@@ -530,7 +530,7 @@ def get_assessment_prompt_template(block_type):
         logger.exception(f"Error fetching assessment prompt for block_type '{block_type}': {e}")
         try:
             connection.rollback()
-        except:
+        except Exception:
             pass
         return None
 
@@ -670,7 +670,7 @@ def mark_block_completed(case_id, block_type):
         logger.exception(f"Error marking block '{block_type}' as completed for case '{case_id}': {e}")
         try:
             connection.rollback()
-        except:
+        except Exception:
             pass
         return False
         

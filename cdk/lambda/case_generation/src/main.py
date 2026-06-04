@@ -359,7 +359,7 @@ def handler(event, context):
         try:
             conn = connect_to_db()
             conn.rollback()
-        except:
+        except Exception:
             pass
         return create_response(500, {'error': 'Internal server error'}, event)
 

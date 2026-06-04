@@ -19,7 +19,7 @@ def s3_key_exists(bucket, key):
     try:
         s3.head_object(Bucket=bucket, Key=key)
         return True
-    except:
+    except Exception:
         return False
 
 
