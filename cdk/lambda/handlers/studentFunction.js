@@ -1580,7 +1580,7 @@ exports.handler = async (event, context) => {
 
   // Ensure DB initialized and obtain connection
   await initConnection();
-  sqlConnection = getSqlConnection();
+  const sqlConnection = getSqlConnection();
 
   // Build user object from context
   const user = {
