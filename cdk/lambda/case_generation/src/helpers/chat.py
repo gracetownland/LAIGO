@@ -116,7 +116,7 @@ def get_bedrock_llm(
     }
 
 
-def get_response(
+def generate_case_title(
     case_type: str, 
     llm: dict,
     jurisdiction: Optional[str] = None, 

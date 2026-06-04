@@ -137,6 +137,7 @@ def connect_to_db():
             try:
                 connection.close()
             except Exception:
+                # Connection may already be closed or broken; discard and reconnect.
                 pass
             connection = None
 
@@ -158,6 +159,7 @@ def connect_to_db():
             try:
                 connection.close()
             except Exception:
+                # Connection may already be closed or broken; discard and reconnect.
                 pass
             connection = None
         raise

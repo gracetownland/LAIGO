@@ -147,6 +147,7 @@ def connect_to_db():
             try:
                 connection.close()
             except Exception:
+                # Connection may already be closed or broken; discard and reconnect.
                 pass
             connection = None
 
@@ -168,6 +169,7 @@ def connect_to_db():
             try:
                 connection.close()
             except Exception:
+                # Connection may already be closed or broken; discard and reconnect.
                 pass
             connection = None
         raise
@@ -410,6 +412,7 @@ def get_summary_prompt_template(prompt_scope, block_type=None):
         try:
             connection.rollback()
         except Exception:
+            # Best-effort rollback after query failure; original error is already logged.
             pass
         return None
 

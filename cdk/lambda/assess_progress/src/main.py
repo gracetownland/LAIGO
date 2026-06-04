@@ -456,6 +456,7 @@ def connect_to_db():
             try:
                 connection.close()
             except Exception:
+                # Connection may already be closed or broken; discard and reconnect.
                 pass
             connection = None
 
@@ -529,6 +530,7 @@ def get_assessment_prompt_template(block_type):
         try:
             connection.rollback()
         except Exception:
+            # Best-effort rollback after query failure; original error is already logged.
             pass
         return None
 
@@ -669,6 +671,7 @@ def mark_block_completed(case_id, block_type):
         try:
             connection.rollback()
         except Exception:
+            # Best-effort rollback after update failure; original error is already logged.
             pass
         return False
         

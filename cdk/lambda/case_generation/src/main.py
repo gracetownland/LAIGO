@@ -8,7 +8,7 @@ import psycopg
 from aws_lambda_powertools import Logger, Metrics
 from bedrock_client import get_bedrock_runtime_client
 
-from helpers.chat import get_bedrock_llm, get_response
+from helpers.chat import get_bedrock_llm, generate_case_title
 
 # Set up logging and metrics for the Lambda function
 logger = Logger(service="CaseGeneration")
@@ -156,6 +156,7 @@ def connect_to_db():
             try:
                 connection.close()
             except Exception:
+                # Connection may already be closed or broken; discard and reconnect.
                 pass
             connection = None
 
@@ -356,6 +357,7 @@ def handler(event, context):
             conn = connect_to_db()
             conn.rollback()
         except Exception:
+            # Best-effort rollback in error path; handler already returns 500 to client.
             pass
         return create_response(500, {'error': 'Internal server error'}, event)
 
@@ -371,7 +373,7 @@ def handle_generate_title(case_id: str, case_type: str, jurisdiction: str, case_
             top_p=BEDROCK_TOP_P,
             max_tokens=BEDROCK_MAX_TOKENS
         )
-        response = get_response(
+        response = generate_case_title(
             case_type=case_type,
             llm=llm,
             jurisdiction=jurisdiction,
