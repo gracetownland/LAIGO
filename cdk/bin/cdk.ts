@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import * as cdk from "aws-cdk-lib";
+import { Aspects } from "aws-cdk-lib";
 import { VpcStack } from "../lib/vpc-stack";
 import { DatabaseStack } from "../lib/database-stack";
 import { DBFlowStack } from "../lib/dbFlow-stack";
@@ -7,21 +8,19 @@ import { CICDStack } from "../lib/cicd-stack";
 import { ApiGatewayStack } from "../lib/api-stack";
 import { AmplifyStack } from "../lib/amplify-stack";
 import { WafStack } from "../lib/waf-stack";
+import { applyGlobalTags, TagValidationAspect } from "../lib/shared/tagging";
 
 const app = new cdk.App();
 
 // Parse params from command line with defaults
 const StackPrefix = app.node.tryGetContext("StackPrefix");
-const version = app.node.tryGetContext("Version");
 const environment = app.node.tryGetContext("Environment");
 const githubRepo = app.node.tryGetContext("GithubRepo");
 const domainName = app.node.tryGetContext("DomainName") || "";
 const sesVerifiedDomain = app.node.tryGetContext("SesVerifiedDomain") || "";
 
-// Apply cost allocation tags to all resources in the app
-cdk.Tags.of(app).add("Project", "LAIGO");
-cdk.Tags.of(app).add("Environment", environment || "development");
-cdk.Tags.of(app).add("ManagedBy", "CDK");
+// Centralized tagging — replaces inline cdk.Tags.of(app).add() calls
+applyGlobalTags(app);
 
 // grab account and region info
 const env: cdk.Environment = {
@@ -98,3 +97,6 @@ new WafStack(app, `${StackPrefix}-WafStack`, {
   crossRegionReferences: true,
   amplifyAppArn: amplify.getAppArn(),
 });
+
+// Validate all resources have required tags during synthesis
+Aspects.of(app).add(new TagValidationAspect());

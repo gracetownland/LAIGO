@@ -9,6 +9,7 @@ import {
   AwsCustomResourcePolicy,
   PhysicalResourceId,
 } from "aws-cdk-lib/custom-resources";
+import { applyStandardTags } from "./shared/tagging";
 
 export class VpcStack extends Stack {
   public readonly vpc: ec2.Vpc;
@@ -21,6 +22,7 @@ export class VpcStack extends Stack {
     props: StackProps & { stackPrefix: string }
   ) {
     super(scope, id, props);
+    applyStandardTags(this, "VPC");
 
     const existingVpcId: string = ""; // CHANGE IF DEPLOYING WITH EXISTING VPC
 

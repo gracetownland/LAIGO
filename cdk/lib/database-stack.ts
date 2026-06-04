@@ -14,6 +14,7 @@ import * as cr from "aws-cdk-lib/custom-resources";
 
 // Local stack imports
 import { VpcStack } from "./vpc-stack";
+import { applyStandardTags } from "./shared/tagging";
 
 /**
  * DatabaseStack creates and configures the RDS PostgreSQL database infrastructure
@@ -38,6 +39,7 @@ export class DatabaseStack extends Stack {
     props?: StackProps,
   ) {
     super(scope, id, props);
+    applyStandardTags(this, "Database");
 
     // Create RDS service-linked role if it doesn't exist
     // This role allows RDS to perform actions on behalf of the service

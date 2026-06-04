@@ -8,6 +8,7 @@ import { BuildSpec } from "aws-cdk-lib/aws-codebuild";
 import { Construct } from "constructs";
 import * as yaml from "yaml";
 import { ApiGatewayStack } from "./api-stack";
+import { applyStandardTags } from "./shared/tagging";
 
 interface AmplifyStackProps extends cdk.StackProps {
   githubRepo: string;
@@ -24,6 +25,7 @@ export class AmplifyStack extends cdk.Stack {
     props: AmplifyStackProps,
   ) {
     super(scope, id, props);
+    applyStandardTags(this, "Amplify");
 
     const githubRepoName = props.githubRepo;
 

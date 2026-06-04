@@ -8,6 +8,7 @@ import * as codepipeline from "aws-cdk-lib/aws-codepipeline";
 import * as codepipeline_actions from "aws-cdk-lib/aws-codepipeline-actions";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as lambda from "aws-cdk-lib/aws-lambda";
+import { applyStandardTags } from "./shared/tagging";
 
 // Configuration interface for Lambda functions in the pipeline
 interface LambdaConfig {
@@ -35,6 +36,7 @@ export class CICDStack extends cdk.Stack {
 
   constructor(scope: Construct, id: string, props: CICDStackProps) {
     super(scope, id, props);
+    applyStandardTags(this, "CICD");
 
     // Set default environment name if not provided
     const envName = props.environmentName ?? "dev";
@@ -149,10 +151,9 @@ export class CICDStack extends cdk.Stack {
         }),
       );
 
-      // Store repository reference and add tags for organization
+      // Store repository reference and add resource-specific tags
       this.ecrRepositories[lambda.name] = ecrRepo;
-      cdk.Tags.of(ecrRepo).add("module", lambda.name); // Tag with module name
-      cdk.Tags.of(ecrRepo).add("env", envName); // Tag with environment
+      cdk.Tags.of(ecrRepo).add("module", lambda.name); // Resource-specific tag (not part of global standard set)
 
       // Create CodeBuild project for building Docker images
       const buildProject = new codebuild.PipelineProject(

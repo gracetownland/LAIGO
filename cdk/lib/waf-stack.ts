@@ -1,6 +1,7 @@
 import * as cdk from "aws-cdk-lib";
 import * as wafv2 from "aws-cdk-lib/aws-wafv2";
 import { Construct } from "constructs";
+import { applyStandardTags } from "./shared/tagging";
 
 interface WafStackProps extends cdk.StackProps {
   amplifyAppArn: string;
@@ -13,6 +14,7 @@ interface WafStackProps extends cdk.StackProps {
 export class WafStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: WafStackProps) {
     super(scope, id, props);
+    applyStandardTags(this, "WAF");
 
     // Create CloudFront WAF Web ACL
     const webAcl = new wafv2.CfnWebACL(this, `${id}-cloudfront-waf`, {

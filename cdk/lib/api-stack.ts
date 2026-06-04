@@ -12,6 +12,7 @@ import { Code, LayerVersion, Runtime } from "aws-cdk-lib/aws-lambda";
 import * as cognito from "aws-cdk-lib/aws-cognito";
 import { VpcStack } from "./vpc-stack";
 import { DatabaseStack } from "./database-stack";
+import { applyStandardTags } from "./shared/tagging";
 import { Fn } from "aws-cdk-lib";
 import { Asset } from "aws-cdk-lib/aws-s3-assets";
 import * as s3 from "aws-cdk-lib/aws-s3";
@@ -95,6 +96,7 @@ export class ApiGatewayStack extends cdk.Stack {
     props: ApiGatewayStackProps,
   ) {
     super(scope, id, props);
+    applyStandardTags(this, "API");
 
     // Determine environment for conditional configuration
     const isProd = this.node.tryGetContext("Environment") === "production";

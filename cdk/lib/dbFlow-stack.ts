@@ -6,6 +6,7 @@ import * as iam from "aws-cdk-lib/aws-iam";
 import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
 import { VpcStack } from "./vpc-stack";
 import { DatabaseStack } from "./database-stack";
+import { applyStandardTags } from "./shared/tagging";
 
 export class DBFlowStack extends Stack {
   constructor(
@@ -16,6 +17,7 @@ export class DBFlowStack extends Stack {
     props?: StackProps,
   ) {
     super(scope, id, props);
+    applyStandardTags(this, "DBFlow");
 
     // Create IAM role for Lambda within the VPC
     const lambdaRole = new iam.Role(this, `${id}-lambda-vpc-role`, {
