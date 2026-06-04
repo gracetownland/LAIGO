@@ -80,7 +80,7 @@ async function publishFeedbackNotificationEvent(
 
 const routes = {
   "GET /instructor/students": async (event, env) => {
-    const { response, user, user_id, sqlConnection } = env;
+    const { response, user, sqlConnection } = env;
     try {
       const userId = user.user_id;
 
@@ -99,7 +99,7 @@ const routes = {
     }
   },
   "GET /instructor/cases_to_review": async (event, env) => {
-    const { response, user, user_id, sqlConnection } = env;
+    const { response, user, sqlConnection } = env;
     try {
       const instructorUserId = user.user_id;
 
@@ -121,7 +121,7 @@ const routes = {
     }
   },
   "PUT /instructor/send_feedback": async (event, env) => {
-    const { response, user, user_id, sqlConnection } = env;
+    const { response, user, sqlConnection } = env;
     if (!event.queryStringParameters?.case_id || !event.body) {
       response.statusCode = 400;
       response.body = JSON.stringify({
@@ -229,7 +229,7 @@ const routes = {
     }
   },
   "GET /instructor/name": async (event, env) => {
-    const { response, user, user_id, sqlConnection } = env;
+    const { response, sqlConnection } = env;
     if (!event.queryStringParameters?.user_email) {
       response.statusCode = 400;
       response.body = JSON.stringify({
@@ -255,7 +255,7 @@ const routes = {
     }
   },
   "GET /instructor/view_students": async (event, env) => {
-    const { response, user, user_id, sqlConnection } = env;
+    const { response, user, sqlConnection } = env;
     try {
       const instructorId = user.user_id;
 
@@ -359,7 +359,7 @@ const routes = {
     }
   },
   "GET /instructor/prompts": async (event, env) => {
-    const { response, user, user_id, sqlConnection } = env;
+    const { response, sqlConnection } = env;
     // SECURITY: Use trusted cognito_id from authorizer
     try {
       const { category, block_type, prompt_scope } =
@@ -406,7 +406,7 @@ const routes = {
     }
   },
   "DELETE /instructor/delete_case": async (event, env) => {
-    const { response, user, user_id, sqlConnection } = env;
+    const { response, user, sqlConnection } = env;
     if (!event.queryStringParameters?.case_id) {
       response.statusCode = 400;
       response.body = JSON.stringify({
@@ -449,7 +449,7 @@ const routes = {
     }
   },
   "PUT /instructor/archive_case": async (event, env) => {
-    const { response, user, user_id, sqlConnection } = env;
+    const { response, user, sqlConnection } = env;
     if (!event.queryStringParameters?.case_id) {
       response.statusCode = 400;
       response.body = JSON.stringify({
@@ -489,7 +489,7 @@ const routes = {
     }
   },
   "PUT /instructor/unarchive_case": async (event, env) => {
-    const { response, user, user_id, sqlConnection } = env;
+    const { response, user, sqlConnection } = env;
     if (!event.queryStringParameters?.case_id) {
       response.statusCode = 400;
       response.body = JSON.stringify({
@@ -529,7 +529,7 @@ const routes = {
     }
   },
   "DELETE /instructor/delete_feedback": async (event, env) => {
-    const { response, user, user_id, sqlConnection } = env;
+    const { response, user, sqlConnection } = env;
     if (!event.queryStringParameters?.message_id) {
       response.statusCode = 400;
       response.body = JSON.stringify({

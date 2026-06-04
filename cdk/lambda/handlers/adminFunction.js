@@ -125,24 +125,6 @@ const isValidCaseTypesPayload = (caseTypes) => {
   return true;
 };
 
-const isValidModelOptionsPayload = (modelOptions) => {
-  if (!Array.isArray(modelOptions) || modelOptions.length === 0) {
-    return false;
-  }
-  const seen = new Set();
-  for (const option of modelOptions) {
-    if (!option || typeof option !== "object") return false;
-    if (typeof option.label !== "string" || typeof option.value !== "string") {
-      return false;
-    }
-    const label = option.label.trim();
-    const value = option.value.trim();
-    if (!label || !value || seen.has(value)) return false;
-    seen.add(value);
-  }
-  return true;
-};
-
 const validateConfigAgainstModelConstraints = (modelId, config, modelOptions) => {
   const model = modelOptions.find((m) => m.value === modelId);
   if (!model || !model.constraints) {
@@ -192,7 +174,7 @@ const validateConfigAgainstModelConstraints = (modelId, config, modelOptions) =>
 
 const routes = {
   "GET /admin/instructors": async (event, env) => {
-    const { response, user, user_id, sqlConnection } = env;
+    const { response, sqlConnection } = env;
     try {
       // SQL query to fetch all users who are instructors
       const instructors = await sqlConnection`
@@ -209,7 +191,7 @@ const routes = {
     }
   },
   "POST /admin/assign_instructor_to_student": async (event, env) => {
-    const { response, user, user_id, sqlConnection } = env;
+    const { response, sqlConnection } = env;
     // Check if the body contains the instructor and student IDs
     if (event.body) {
       try {
@@ -248,7 +230,7 @@ const routes = {
         }
 
         // Perform the database insertion
-        const assignment = await sqlConnection`
+        await sqlConnection`
                 INSERT INTO "instructor_students" (instructor_id, student_id)
                 VALUES ( ${instructor_id}, ${student.user_id})
                 ON CONFLICT (instructor_id, student_id) DO NOTHING;
@@ -269,7 +251,7 @@ const routes = {
     }
   },
   "DELETE /admin/assign_instructor_to_student": async (event, env) => {
-    const { response, user, user_id, sqlConnection } = env;
+    const { response, sqlConnection } = env;
     if (event.queryStringParameters) {
       try {
         const { instructor_id, student_id } = event.queryStringParameters;
@@ -302,7 +284,7 @@ const routes = {
     }
   },
   "GET /admin/students": async (event, env) => {
-    const { response, user, user_id, sqlConnection } = env;
+    const { response, sqlConnection } = env;
     try {
       // SQL query to fetch all users who are instructors
       const students = await sqlConnection`
@@ -319,7 +301,7 @@ const routes = {
     }
   },
   "GET /admin/users": async (event, env) => {
-    const { response, user, user_id, sqlConnection } = env;
+    const { response, sqlConnection } = env;
     try {
       const params = event.queryStringParameters || {};
       const page = parseInt(params.page || "0", 10);
@@ -391,7 +373,7 @@ const routes = {
     }
   },
   "PUT /admin/user_role": async (event, env) => {
-    const { response, user, user_id, sqlConnection } = env;
+    const { response, sqlConnection } = env;
     try {
       if (!event.body) throw new Error("Request body is missing");
       const { email: userEmail, operation, role } = parseBody(event.body);
@@ -484,7 +466,7 @@ const routes = {
     }
   },
   "POST /admin/prompt": async (event, env) => {
-    const { response, user, user_id, sqlConnection } = env;
+    const { response, user_id, sqlConnection } = env;
     try {
       console.log("System prompt creation initiated");
 
@@ -541,7 +523,7 @@ const routes = {
     }
   },
   "PUT /admin/prompt": async (event, env) => {
-    const { response, user, user_id, sqlConnection } = env;
+    const { response, sqlConnection } = env;
     try {
       console.log("Prompt version update initiated");
 
@@ -587,7 +569,7 @@ const routes = {
     }
   },
   "GET /admin/prompt": async (event, env) => {
-    const { response, user, user_id, sqlConnection } = env;
+    const { response, sqlConnection } = env;
     try {
       const { category, block_type, prompt_scope } = event.queryStringParameters || {};
 
@@ -659,7 +641,7 @@ const routes = {
     }
   },
   "GET /admin/prompt/active": async (event, env) => {
-    const { response, user, user_id, sqlConnection } = env;
+    const { response, sqlConnection } = env;
     try {
       // Fetch only active prompts
       const activePrompts = await sqlConnection`
@@ -684,7 +666,7 @@ const routes = {
     }
   },
   "POST /admin/prompt/activate": async (event, env) => {
-    const { response, user, user_id, sqlConnection } = env;
+    const { response, sqlConnection } = env;
     try {
       if (!event.body) throw new Error("Request body is missing");
 
@@ -748,7 +730,7 @@ const routes = {
     }
   },
   "DELETE /admin/prompt": async (event, env) => {
-    const { response, user, user_id, sqlConnection } = env;
+    const { response, sqlConnection } = env;
     try {
       if (
         !event.queryStringParameters ||
@@ -798,7 +780,7 @@ const routes = {
     }
   },
   "GET /admin/ai_config": async (event, env) => {
-    const { response, user, user_id, sqlConnection } = env;
+    const { response } = env;
     try {
       const { SSMClient, GetParameterCommand } =
         await import("@aws-sdk/client-ssm");
@@ -854,7 +836,7 @@ const routes = {
     }
   },
   "POST /admin/ai_config": async (event, env) => {
-    const { response, user, user_id, sqlConnection } = env;
+    const { response } = env;
     try {
       const { SSMClient, PutParameterCommand, GetParameterCommand } =
         await import("@aws-sdk/client-ssm");
@@ -1071,7 +1053,7 @@ const routes = {
     }
   },
   "GET /admin/file_size_limit": async (event, env) => {
-    const { response, user, user_id, sqlConnection } = env;
+    const { response } = env;
     try {
       const { SSMClient, GetParameterCommand } =
         await import("@aws-sdk/client-ssm");
@@ -1090,7 +1072,7 @@ const routes = {
     }
   },
   "POST /admin/file_size_limit": async (event, env) => {
-    const { response, user, user_id, sqlConnection } = env;
+    const { response } = env;
     try {
       const { SSMClient, PutParameterCommand } =
         await import("@aws-sdk/client-ssm");
@@ -1124,7 +1106,7 @@ const routes = {
     }
   },
   "GET /student/file_size_limit": async (event, env) => {
-    const { response, user, user_id, sqlConnection } = env;
+    const { response } = env;
     try {
       const { SSMClient, GetParameterCommand } =
         await import("@aws-sdk/client-ssm");
@@ -1143,7 +1125,7 @@ const routes = {
     }
   },
   "GET /admin/instructorStudents": async (event, env) => {
-    const { response, user, user_id, sqlConnection } = env;
+    const { response, sqlConnection } = env;
     if (
       event.queryStringParameters != null &&
       event.queryStringParameters.instructor_id
@@ -1168,7 +1150,7 @@ const routes = {
     }
   },
   "POST /admin/disclaimer": async (event, env) => {
-    const { response, user, user_id, sqlConnection } = env;
+    const { response, user_id, sqlConnection } = env;
     try {
       console.log("Disclaimer creation initiated");
 
@@ -1203,7 +1185,7 @@ const routes = {
     }
   },
   "GET /admin/disclaimer": async (event, env) => {
-    const { response, user, user_id, sqlConnection } = env;
+    const { response, sqlConnection } = env;
     try {
       // Fetch ALL disclaimers with author info, ordered by version
       const result = await sqlConnection`
@@ -1228,7 +1210,7 @@ const routes = {
     }
   },
   "PUT /admin/disclaimer": async (event, env) => {
-    const { response, user, user_id, sqlConnection } = env;
+    const { response, sqlConnection } = env;
     try {
       console.log("Disclaimer version update initiated");
 
@@ -1275,7 +1257,7 @@ const routes = {
     }
   },
   "DELETE /admin/disclaimer": async (event, env) => {
-    const { response, user, user_id, sqlConnection } = env;
+    const { response, sqlConnection } = env;
     try {
       if (
         !event.queryStringParameters ||
@@ -1323,7 +1305,7 @@ const routes = {
     }
   },
   "POST /admin/disclaimer/activate": async (event, env) => {
-    const { response, user, user_id, sqlConnection } = env;
+    const { response, sqlConnection } = env;
     try {
       if (!event.body) throw new Error("Request body is missing");
 
@@ -1369,7 +1351,7 @@ const routes = {
     }
   },
   "POST /admin/elevate_instructor": async (event, env) => {
-    const { response, user, user_id, sqlConnection } = env;
+    const { response, sqlConnection } = env;
     if (
       event.queryStringParameters != null &&
       event.queryStringParameters.email
@@ -1433,7 +1415,7 @@ const routes = {
     }
   },
   "POST /admin/lower_instructor": async (event, env) => {
-    const { response, user, user_id, sqlConnection } = env;
+    const { response, sqlConnection } = env;
     if (
       event.queryStringParameters != null &&
       event.queryStringParameters.user_id
@@ -1494,7 +1476,7 @@ const routes = {
     }
   },
   "DELETE /admin/delete_instructor_student_assignment": async (event, env) => {
-    const { response, user, user_id, sqlConnection } = env;
+    const { response, sqlConnection } = env;
     if (
       event.queryStringParameters != null &&
       event.queryStringParameters.instructor_id &&
@@ -1559,7 +1541,7 @@ const routes = {
     }
   },
   "GET /admin/message_limit": async (event, env) => {
-    const { response, user, user_id, sqlConnection } = env;
+    const { response } = env;
     console.log("Fetching message limit");
     try {
       const ssmClient = new SSMClient();
@@ -1577,7 +1559,7 @@ const routes = {
     }
   },
   "PUT /admin/message_limit": async (event, env) => {
-    const { response, user, user_id, sqlConnection } = env;
+    const { response } = env;
     console.log("Updating message limit");
     if (event.body) {
       try {

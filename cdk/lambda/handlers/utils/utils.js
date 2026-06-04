@@ -3,7 +3,6 @@ const { Logger } = require("@aws-lambda-powertools/logger");
 const logger = new Logger({ serviceName: "HandlerUtils" });
 
 let { SM_DB_CREDENTIALS, RDS_PROXY_ENDPOINT } = process.env;
-let sqlConnection;
 
 const initConnection = async () => {
   if (!global.sqlConnection) {
