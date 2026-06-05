@@ -78,7 +78,7 @@ The Prompt Workspace allows administrators to:
 
 #### Prompt Playground
 
-The Prompt Playground allows administrators to test out different system prompts and LLM configurations in a chat interface that mimicks the main application. Administrators can:
+The Prompt Playground allows administrators to test out different system prompts and LLM configurations in a chat interface that mimics the main application. Administrators can:
 
 - Change model configuration through the Model Configuration Panel
 - Select which system prompt to test using the dropdown menus in the System Prompt Panel
@@ -90,7 +90,7 @@ At the bottom, a chat interface allows administrators to chat with the AI, which
 
 ![image](./media/admin-prompt-playground-chat.png)
 
-Clicking "Compare" in the top right duplicates all configuation options, allowing administrators to compare 2 separate configurations side by side.
+Clicking "Compare" in the top right duplicates all configuration options, allowing administrators to compare 2 separate configurations side by side.
 
 ![image](./media/admin-prompt-playground-compare-config.png)
 
@@ -126,7 +126,7 @@ Clicking the prompts icon in the header allows supervisors to view all the activ
 
 ### Cases Page
 
-Upon logging in as a advocate, they see this home page with their most recent cases and the statuses of these cases (i.e. In Progress, Submitted for review or Reviewed by Supervisor)
+Upon logging in as an advocate, they see this home page with their most recent cases and the statuses of these cases (i.e. In Progress, Submitted for review or Reviewed by Supervisor)
 
 ![image](./media/advocate-all-cases.png)
 
