@@ -86,6 +86,7 @@ export class DBFlowStack extends Stack {
         DB_SECRET_NAME: db.secretPathAdmin.secretName,
         DB_USER_SECRET_NAME: db.secretPathUser.secretName,
         DB_TABLE_CREATOR_SECRET_NAME: db.secretPathTableCreator.secretName,
+        RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint,
         // SSL/TLS handled per-connection in index.js with ssl: { rejectUnauthorized: false }
         // for RDS Proxy self-signed certificates. Do NOT use NODE_TLS_REJECT_UNAUTHORIZED=0
         // as it disables TLS verification globally for all outbound connections.

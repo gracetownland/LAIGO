@@ -106,7 +106,7 @@ export class DatabaseStack extends Stack {
       `${id}-rdsParameterGroup`,
       {
         engine: rds.DatabaseInstanceEngine.postgres({
-          version: rds.PostgresEngineVersion.VER_17_9,
+          version: rds.PostgresEngineVersion.of("17.10", "17"),
         }),
         description: "Custom parameter group for LAIGO database with SSL enforcement",
         parameters: {
@@ -122,7 +122,7 @@ export class DatabaseStack extends Stack {
         subnetType: ec2.SubnetType.PRIVATE_ISOLATED, // Deploy in private subnets for security
       },
       engine: rds.DatabaseInstanceEngine.postgres({
-        version: rds.PostgresEngineVersion.VER_17_9,
+        version: rds.PostgresEngineVersion.of("17.10", "17"),
       }),
       instanceType: ec2.InstanceType.of(
         ec2.InstanceClass.BURSTABLE4_GRAVITON, // ARM-based instance for cost efficiency

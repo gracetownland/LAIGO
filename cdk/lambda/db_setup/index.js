@@ -10,6 +10,17 @@ const migrate = require("node-pg-migrate").default;
 
 const sm = new SecretsManagerClient();
 
+function dbConnectionConfig(secret, hostOverride) {
+  return {
+    user: secret.username,
+    password: secret.password,
+    host: hostOverride || secret.host,
+    database: secret.dbname,
+    port: secret.port || 5432,
+    ssl: { rejectUnauthorized: false },
+  };
+}
+
 async function getSecret(name) {
   const data = await sm.send(new GetSecretValueCommand({ SecretId: name }));
   return JSON.parse(data.SecretString);
@@ -26,37 +37,32 @@ async function putSecret(name, secret) {
 
 
 async function runMigrations(db, direction = "up", count = Infinity) {
-  // Use SSL with relaxed certificate validation for RDS Proxy self-signed certificates
-  const dbUrl = `postgresql://${encodeURIComponent(
-    db.username
-  )}:${encodeURIComponent(db.password)}@${db.host}:${db.port || 5432}/${
-    db.dbname
-  }?sslmode=require`;
-  
+  const client = new Client(dbConnectionConfig(db, process.env.RDS_PROXY_ENDPOINT));
+  await client.connect();
+
   try {
     await migrate({
-      databaseUrl: dbUrl,
+      dbClient: client,
       dir: path.join(__dirname, "migrations"),
       direction,
       count,
       migrationsTable: "pgmigrations",
       logger: console,
       createSchema: false,
-      // Pass SSL config via databaseUrlConfig for node-pg-migrate
-      databaseUrlConfig: {
-        ssl: { rejectUnauthorized: false }, // Accept RDS Proxy self-signed certificates
-      },
+      singleTransaction: false,
     });
     console.log("Database migrations completed successfully with SSL/TLS");
   } catch (error) {
     console.error("Error running migrations:", error);
     console.error("Migration connection details:", {
-      host: db.host,
-      port: db.port || 5432,
-      database: db.dbname,
-      sslMode: 'require',
+      host: client.host,
+      port: client.port,
+      database: client.database,
+      sslEnabled: true,
     });
     throw error;
+  } finally {
+    await client.end();
   }
 }
 
@@ -70,15 +76,9 @@ async function createAppUsers(
   userSecretName,
   tableCreatorSecretName
 ) {
-  // Use SSL with relaxed certificate validation for RDS Proxy self-signed certificates
-  const adminClient = new Client({
-    user: adminDb.username,
-    password: adminDb.password,
-    host: adminDb.host,
-    database: adminDb.dbname,
-    port: adminDb.port || 5432,
-    ssl: { rejectUnauthorized: false }, // Accept RDS Proxy self-signed certificates
-  });
+  const adminClient = new Client(
+    dbConnectionConfig(adminDb, process.env.RDS_PROXY_ENDPOINT),
+  );
   
   try {
     await adminClient.connect();
@@ -137,21 +137,20 @@ async function createAppUsers(
     GRANT tablecreator TO ${TC_NAME};
   `;
 
-  // Create/update users with parameterized passwords to prevent SQL injection.
-  // Passwords are passed as $1 parameters, never interpolated into SQL strings.
+  // Passwords are random hex strings; embed via format(%L) inside the DO block.
   const createOrUpdateUserSql = `
     DO $$
     BEGIN
       IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${RW_NAME}') THEN
-        EXECUTE format('CREATE USER ${RW_NAME} WITH PASSWORD %L', $1);
+        EXECUTE format('CREATE USER ${RW_NAME} WITH PASSWORD %L', '${rwPass}');
       ELSE
-        EXECUTE format('ALTER USER ${RW_NAME} WITH PASSWORD %L', $1);
+        EXECUTE format('ALTER USER ${RW_NAME} WITH PASSWORD %L', '${rwPass}');
       END IF;
 
       IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${TC_NAME}') THEN
-        EXECUTE format('CREATE USER ${TC_NAME} WITH PASSWORD %L', $2);
+        EXECUTE format('CREATE USER ${TC_NAME} WITH PASSWORD %L', '${tcPass}');
       ELSE
-        EXECUTE format('ALTER USER ${TC_NAME} WITH PASSWORD %L', $2);
+        EXECUTE format('ALTER USER ${TC_NAME} WITH PASSWORD %L', '${tcPass}');
       END IF;
     END$$;
   `;
@@ -159,8 +158,8 @@ async function createAppUsers(
   await adminClient.query("BEGIN");
   try {
     await adminClient.query(sql);
-  
-    await adminClient.query(createOrUpdateUserSql, [rwPass, tcPass]);
+
+    await adminClient.query(createOrUpdateUserSql);
     await adminClient.query("COMMIT");
   } catch (e) {
     await adminClient.query("ROLLBACK");

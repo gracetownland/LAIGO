@@ -971,12 +971,12 @@ export class ApiGatewayStack extends cdk.Stack {
           filtersConfig: [
             {
               inputStrength: "MEDIUM",
-              outputStrength: "MEDIUM",
+              outputStrength: "NONE",
               type: "PROMPT_ATTACK",
               inputAction: "BLOCK",
-              outputAction: "BLOCK",
+              outputAction: "NONE",
               inputEnabled: true,
-              outputEnabled: true,
+              outputEnabled: false,
               inputModalities: ["TEXT"],
               outputModalities: ["TEXT"],
             },
