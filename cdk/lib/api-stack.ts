@@ -134,6 +134,16 @@ export class ApiGatewayStack extends cdk.Stack {
       description: "psycopg3 with binary and pool support for Python 3.12",
     });
 
+    const bedrockClientLayer = new lambda.LayerVersion(
+      this,
+      `${id}-BedrockClientLayer`,
+      {
+        code: lambda.Code.fromAsset("./layers/bedrock_client"),
+        compatibleRuntimes: [lambda.Runtime.PYTHON_3_12],
+        description: "Shared Bedrock client utilities for Python Lambdas",
+      },
+    );
+
     // Import AWS Powertools layer for Python observability
     const powertoolsLayer = lambda.LayerVersion.fromLayerVersionArn(
       this,
@@ -1632,7 +1642,7 @@ export class ApiGatewayStack extends cdk.Stack {
         runtime: lambda.Runtime.PYTHON_3_12,
         handler: "main.handler",
         code: lambda.Code.fromAsset("./lambda/case_generation/src"),
-        layers: [psycopg3Layer, powertoolsLayer],
+        layers: [psycopg3Layer, powertoolsLayer, bedrockClientLayer],
         memorySize: 512,
         timeout: cdk.Duration.seconds(30),
         vpc: vpcStack.vpc,
@@ -1874,7 +1884,7 @@ export class ApiGatewayStack extends cdk.Stack {
         runtime: lambda.Runtime.PYTHON_3_12,
         handler: "main.handler",
         code: lambda.Code.fromAsset("./lambda/assess_progress/src"),
-        layers: [psycopg3Layer, powertoolsLayer],
+        layers: [psycopg3Layer, powertoolsLayer, bedrockClientLayer],
         functionName: `${id}-AssessProgressFunction`,
         timeout: Duration.seconds(30),
         memorySize: 1024,
