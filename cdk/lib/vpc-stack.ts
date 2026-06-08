@@ -2,6 +2,7 @@ import { Stack, StackProps } from "aws-cdk-lib";
 import * as cdk from "aws-cdk-lib";
 import { Construct } from "constructs";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
+import * as logs from "aws-cdk-lib/aws-logs";
 import { Fn } from "aws-cdk-lib";
 import { applyStandardTags } from "./shared/tagging";
 
@@ -158,7 +159,37 @@ export class VpcStack extends Stack {
         privateDnsEnabled: false, // Disable private DNS to avoid conflicts
       });
 
-      this.vpc.addFlowLog(`${id}-vpcFlowLog`);
+      // Enhanced VPC Flow Log with custom format and explicit retention
+      const flowLogGroupExisting = new logs.LogGroup(this, 'FlowLogGroupExisting', {
+        logGroupName: `/vpc/flow-logs/${id}-existing`,
+        retention: logs.RetentionDays.THREE_MONTHS,
+        removalPolicy: cdk.RemovalPolicy.RETAIN,
+      });
+
+      this.vpc.addFlowLog(`${id}-vpcFlowLog`, {
+        destination: ec2.FlowLogDestination.toCloudWatchLogs(flowLogGroupExisting),
+        trafficType: ec2.FlowLogTrafficType.ALL,
+        logFormat: [
+          ec2.LogFormat.VERSION,
+          ec2.LogFormat.ACCOUNT_ID,
+          ec2.LogFormat.INTERFACE_ID,
+          ec2.LogFormat.SRC_ADDR,
+          ec2.LogFormat.DST_ADDR,
+          ec2.LogFormat.SRC_PORT,
+          ec2.LogFormat.DST_PORT,
+          ec2.LogFormat.PROTOCOL,
+          ec2.LogFormat.PACKETS,
+          ec2.LogFormat.BYTES,
+          ec2.LogFormat.START_TIMESTAMP,
+          ec2.LogFormat.END_TIMESTAMP,
+          ec2.LogFormat.ACTION,
+          ec2.LogFormat.LOG_STATUS,
+          ec2.LogFormat.VPC_ID,
+          ec2.LogFormat.SUBNET_ID,
+          ec2.LogFormat.TCP_FLAGS,
+          ec2.LogFormat.FLOW_DIRECTION,
+        ],
+      });
     } else {
       // Allow users to specify custom CIDR via CDK context, otherwise use default
       this.vpcCidrString = this.node.tryGetContext('vpcCidr') || "10.0.0.0/16";
@@ -187,7 +218,37 @@ export class VpcStack extends Stack {
         ],
       });
 
-      this.vpc.addFlowLog("laigo-vpcFlowLog");
+      // Enhanced VPC Flow Log with custom format and explicit retention
+      const flowLogGroup = new logs.LogGroup(this, 'FlowLogGroup', {
+        logGroupName: `/vpc/flow-logs/${id}`,
+        retention: logs.RetentionDays.THREE_MONTHS,
+        removalPolicy: cdk.RemovalPolicy.RETAIN,
+      });
+
+      this.vpc.addFlowLog("laigo-vpcFlowLog", {
+        destination: ec2.FlowLogDestination.toCloudWatchLogs(flowLogGroup),
+        trafficType: ec2.FlowLogTrafficType.ALL,
+        logFormat: [
+          ec2.LogFormat.VERSION,
+          ec2.LogFormat.ACCOUNT_ID,
+          ec2.LogFormat.INTERFACE_ID,
+          ec2.LogFormat.SRC_ADDR,
+          ec2.LogFormat.DST_ADDR,
+          ec2.LogFormat.SRC_PORT,
+          ec2.LogFormat.DST_PORT,
+          ec2.LogFormat.PROTOCOL,
+          ec2.LogFormat.PACKETS,
+          ec2.LogFormat.BYTES,
+          ec2.LogFormat.START_TIMESTAMP,
+          ec2.LogFormat.END_TIMESTAMP,
+          ec2.LogFormat.ACTION,
+          ec2.LogFormat.LOG_STATUS,
+          ec2.LogFormat.VPC_ID,
+          ec2.LogFormat.SUBNET_ID,
+          ec2.LogFormat.TCP_FLAGS,
+          ec2.LogFormat.FLOW_DIRECTION,
+        ],
+      });
 
       // Add secrets manager endpoint to VPC
       this.vpc.addInterfaceEndpoint(`${id}-Secrets Manager Endpoint`, {

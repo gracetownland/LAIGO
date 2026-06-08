@@ -28,6 +28,8 @@ import * as events from "aws-cdk-lib/aws-events";
 import * as targets from "aws-cdk-lib/aws-events-targets";
 import * as ses from "aws-cdk-lib/aws-ses";
 import * as route53 from "aws-cdk-lib/aws-route53";
+import * as cloudwatch from "aws-cdk-lib/aws-cloudwatch";
+import * as sns from "aws-cdk-lib/aws-sns";
 
 // Stack properties for API Gateway configuration
 interface ApiGatewayStackProps extends cdk.StackProps {
@@ -454,7 +456,12 @@ export class ApiGatewayStack extends cdk.Stack {
           name: "LimitRequests2000",
           priority: 2,
           action: {
-            block: {},
+            block: {
+              customResponse: {
+                responseCode: 429,
+                customResponseBodyKey: "rate-limited",
+              },
+            },
           },
           statement: {
             rateBasedStatement: {
@@ -473,7 +480,12 @@ export class ApiGatewayStack extends cdk.Stack {
           name: "PerUserRateLimit",
           priority: 3,
           action: {
-            block: {},
+            block: {
+              customResponse: {
+                responseCode: 429,
+                customResponseBodyKey: "rate-limited",
+              },
+            },
           },
           statement: {
             rateBasedStatement: {
@@ -501,6 +513,12 @@ export class ApiGatewayStack extends cdk.Stack {
           },
         },
       ],
+      customResponseBodies: {
+        "rate-limited": {
+          contentType: "APPLICATION_JSON",
+          content: JSON.stringify({ error: "Too many requests. Please wait a few minutes and try again.", retryAfter: 300 }),
+        },
+      },
     });
     // Associate WAF with API Gateway stage
     const wafAssociation = new wafv2.CfnWebACLAssociation(
@@ -514,6 +532,25 @@ export class ApiGatewayStack extends cdk.Stack {
 
     // Ensure API stage is created before WAF association
     wafAssociation.node.addDependency(this.api.deploymentStage);
+
+    // WAF logging for API Gateway — incident response and false-positive analysis
+    const wafApiLogGroup = new logs.LogGroup(this, `${id}-WafApiLogGroup`, {
+      logGroupName: `aws-waf-logs-${id}-api-gateway`,
+      retention: logs.RetentionDays.THREE_MONTHS,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+
+    new wafv2.CfnLoggingConfiguration(this, `${id}-WafApiLogging`, {
+      resourceArn: waf.attrArn,
+      logDestinationConfigs: [
+        cdk.Stack.of(this).formatArn({
+          service: 'logs',
+          resource: 'log-group',
+          resourceName: wafApiLogGroup.logGroupName,
+          arnFormat: cdk.ArnFormat.COLON_RESOURCE_NAME,
+        }),
+      ],
+    });
 
     // Create single IAM role for all authenticated users
     // Authorization is now handled by Lambda authorizers querying the database
@@ -2645,5 +2682,201 @@ export class ApiGatewayStack extends cdk.Stack {
 
     // Store EventBridge bus reference for other constructs
     this.notificationEventBus = notificationEventBus;
+
+    // ==========================================
+    // Security Monitoring: Alarms and Dashboard
+    // ==========================================
+
+    // SNS topic for security alerts
+    const securityAlertsTopic = new sns.Topic(this, `${id}-SecurityAlerts`, {
+      topicName: `${id}-security-alerts`,
+      displayName: "LAIGO Security Alerts",
+    });
+
+    // WAF Blocked Requests Alarm (API Gateway)
+    new cloudwatch.Alarm(this, `${id}-WafApiBlockedSpike`, {
+      metric: new cloudwatch.Metric({
+        namespace: "AWS/WAFV2",
+        metricName: "BlockedRequests",
+        dimensionsMap: {
+          WebACL: "DFO-firewall",
+          Region: this.region,
+          Rule: "ALL",
+        },
+        statistic: "Sum",
+        period: cdk.Duration.minutes(5),
+      }),
+      threshold: 100,
+      evaluationPeriods: 1,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
+      alarmDescription: "WAF API Gateway blocked request spike - possible active attack",
+      alarmName: `${id}-waf-api-blocked-spike`,
+    });
+
+    // WAF Rate Limit Triggers Alarm
+    new cloudwatch.Alarm(this, `${id}-WafRateLimitTriggers`, {
+      metric: new cloudwatch.Metric({
+        namespace: "AWS/WAFV2",
+        metricName: "BlockedRequests",
+        dimensionsMap: {
+          WebACL: "DFO-firewall",
+          Region: this.region,
+          Rule: "LimitRequests2000",
+        },
+        statistic: "Sum",
+        period: cdk.Duration.minutes(5),
+      }),
+      threshold: 10,
+      evaluationPeriods: 1,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
+      alarmDescription: "Multiple IPs hitting WAF rate limit - possible coordinated attack",
+      alarmName: `${id}-waf-rate-limit-spike`,
+    });
+
+    // Per-User Rate Limit Alarm
+    new cloudwatch.Alarm(this, `${id}-WafPerUserRateLimit`, {
+      metric: new cloudwatch.Metric({
+        namespace: "AWS/WAFV2",
+        metricName: "BlockedRequests",
+        dimensionsMap: {
+          WebACL: "DFO-firewall",
+          Region: this.region,
+          Rule: "PerUserRateLimit",
+        },
+        statistic: "Sum",
+        period: cdk.Duration.minutes(5),
+      }),
+      threshold: 5,
+      evaluationPeriods: 1,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
+      alarmDescription: "Multiple users hitting per-user rate limit - possible credential stuffing",
+      alarmName: `${id}-waf-per-user-rate-spike`,
+    });
+
+    // API Gateway 5XX Error Alarm
+    new cloudwatch.Alarm(this, `${id}-Api5xxAlarm`, {
+      metric: this.api.metricServerError({
+        statistic: "Sum",
+        period: cdk.Duration.minutes(5),
+      }),
+      threshold: 10,
+      evaluationPeriods: 1,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
+      alarmDescription: "API Gateway 5XX error spike - backend failures",
+      alarmName: `${id}-api-5xx-spike`,
+    });
+
+    // API Gateway 4XX Error Alarm  
+    new cloudwatch.Alarm(this, `${id}-Api4xxAlarm`, {
+      metric: this.api.metricClientError({
+        statistic: "Sum",
+        period: cdk.Duration.minutes(5),
+      }),
+      threshold: 50,
+      evaluationPeriods: 2,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
+      alarmDescription: "API Gateway 4XX error spike - possible auth bypass attempts",
+      alarmName: `${id}-api-4xx-spike`,
+    });
+
+    // Security Dashboard
+    new cloudwatch.Dashboard(this, `${id}-SecurityDashboard`, {
+      dashboardName: `${id}-security-monitoring`,
+      widgets: [
+        [
+          new cloudwatch.GraphWidget({
+            title: "WAF Blocked Requests (API Gateway)",
+            left: [
+              new cloudwatch.Metric({
+                namespace: "AWS/WAFV2",
+                metricName: "BlockedRequests",
+                dimensionsMap: { WebACL: "DFO-firewall", Region: this.region, Rule: "ALL" },
+                statistic: "Sum",
+                period: cdk.Duration.minutes(5),
+              }),
+            ],
+            width: 12,
+          }),
+          new cloudwatch.GraphWidget({
+            title: "WAF Allowed vs Blocked (API Gateway)",
+            left: [
+              new cloudwatch.Metric({
+                namespace: "AWS/WAFV2",
+                metricName: "AllowedRequests",
+                dimensionsMap: { WebACL: "DFO-firewall", Region: this.region, Rule: "ALL" },
+                statistic: "Sum",
+                period: cdk.Duration.minutes(5),
+              }),
+            ],
+            right: [
+              new cloudwatch.Metric({
+                namespace: "AWS/WAFV2",
+                metricName: "BlockedRequests",
+                dimensionsMap: { WebACL: "DFO-firewall", Region: this.region, Rule: "ALL" },
+                statistic: "Sum",
+                period: cdk.Duration.minutes(5),
+              }),
+            ],
+            width: 12,
+          }),
+        ],
+        [
+          new cloudwatch.GraphWidget({
+            title: "Rate Limit Blocks (IP + Per-User)",
+            left: [
+              new cloudwatch.Metric({
+                namespace: "AWS/WAFV2",
+                metricName: "BlockedRequests",
+                dimensionsMap: { WebACL: "DFO-firewall", Region: this.region, Rule: "LimitRequests2000" },
+                statistic: "Sum",
+                period: cdk.Duration.minutes(5),
+                label: "IP Rate Limit",
+              }),
+              new cloudwatch.Metric({
+                namespace: "AWS/WAFV2",
+                metricName: "BlockedRequests",
+                dimensionsMap: { WebACL: "DFO-firewall", Region: this.region, Rule: "PerUserRateLimit" },
+                statistic: "Sum",
+                period: cdk.Duration.minutes(5),
+                label: "Per-User Rate Limit",
+              }),
+            ],
+            width: 12,
+          }),
+          new cloudwatch.GraphWidget({
+            title: "API Gateway Errors (4XX / 5XX)",
+            left: [
+              this.api.metricClientError({ statistic: "Sum", period: cdk.Duration.minutes(5), label: "4XX" }),
+              this.api.metricServerError({ statistic: "Sum", period: cdk.Duration.minutes(5), label: "5XX" }),
+            ],
+            width: 12,
+          }),
+        ],
+        [
+          new cloudwatch.GraphWidget({
+            title: "API Gateway Latency (P50 / P99)",
+            left: [
+              this.api.metricLatency({ statistic: "p50", period: cdk.Duration.minutes(5), label: "P50" }),
+              this.api.metricLatency({ statistic: "p99", period: cdk.Duration.minutes(5), label: "P99" }),
+            ],
+            width: 12,
+          }),
+          new cloudwatch.SingleValueWidget({
+            title: "Total API Requests (Last Hour)",
+            metrics: [
+              this.api.metricCount({ statistic: "Sum", period: cdk.Duration.hours(1) }),
+            ],
+            width: 12,
+          }),
+        ],
+      ],
+    });
+
+    // Export SNS topic ARN for subscription
+    new cdk.CfnOutput(this, `${id}-SecurityAlertsTopicArn`, {
+      value: securityAlertsTopic.topicArn,
+      description: "SNS Topic ARN for security alerts — subscribe email/Slack",
+      exportName: `${id}-SecurityAlertsTopicArn`,
+    });
   }
 }

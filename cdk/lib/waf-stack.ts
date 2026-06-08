@@ -1,5 +1,6 @@
 import * as cdk from "aws-cdk-lib";
 import * as wafv2 from "aws-cdk-lib/aws-wafv2";
+import * as logs from "aws-cdk-lib/aws-logs";
 import { Construct } from "constructs";
 import { applyStandardTags } from "./shared/tagging";
 
@@ -70,6 +71,26 @@ export class WafStack extends cdk.Stack {
     new wafv2.CfnWebACLAssociation(this, `${id}-WebACLAssociation`, {
       resourceArn: props.amplifyAppArn,
       webAclArn: webAcl.attrArn,
+    });
+
+    // WAF logging for incident response and false-positive analysis
+    const wafLogGroup = new logs.LogGroup(this, `${id}-WafCfLogGroup`, {
+      logGroupName: `aws-waf-logs-${id}-cloudfront`,
+      retention: logs.RetentionDays.THREE_MONTHS,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+
+    new wafv2.CfnLoggingConfiguration(this, `${id}-WafCfLogging`, {
+      resourceArn: webAcl.attrArn,
+      logDestinationConfigs: [
+        // WAF requires the ARN without :* suffix, but CDK log group ARN includes it
+        cdk.Stack.of(this).formatArn({
+          service: 'logs',
+          resource: 'log-group',
+          resourceName: wafLogGroup.logGroupName,
+          arnFormat: cdk.ArnFormat.COLON_RESOURCE_NAME,
+        }),
+      ],
     });
 
     // Export WAF ARN for reference
