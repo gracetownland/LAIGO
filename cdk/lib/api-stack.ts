@@ -379,10 +379,14 @@ export class ApiGatewayStack extends cdk.Stack {
     // Transform OpenAPI spec for API Gateway (resolves CloudFormation intrinsic functions)
     const data = Fn.transform("AWS::Include", { Location: asset.s3ObjectUrl });
 
-    // Create CloudWatch log group for API access logs
+    // Create CloudWatch log group for API access logs (metadata only — no request/response bodies)
     const accessLogGroup = new logs.LogGroup(this, `${id}-ApiAccessLogs`, {
-      retention: logs.RetentionDays.ONE_MONTH,
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      retention: isProd
+        ? logs.RetentionDays.THREE_MONTHS
+        : logs.RetentionDays.ONE_WEEK,
+      removalPolicy: isProd
+        ? cdk.RemovalPolicy.RETAIN
+        : cdk.RemovalPolicy.DESTROY,
     });
 
     // Create API Gateway REST API from OpenAPI specification
@@ -395,7 +399,7 @@ export class ApiGatewayStack extends cdk.Stack {
       deployOptions: {
         stageName: "prod", // Production stage
         loggingLevel: apigateway.MethodLoggingLevel.ERROR, // Log errors only
-        dataTraceEnabled: true, // Enable request/response logging
+        dataTraceEnabled: !isProd, // Dev only — avoids logging legal case content / PII in prod
         metricsEnabled: true, // Enable CloudWatch metrics
         accessLogDestination: new apigateway.LogGroupLogDestination(
           accessLogGroup,
