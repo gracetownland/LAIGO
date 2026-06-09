@@ -59,7 +59,7 @@ async function initializeConnection(SM_DB_CREDENTIALS, RDS_PROXY_ENDPOINT) {
       username: credentials.username,
       password: credentials.password,
       database: credentials.dbname,
-      ssl: { rejectUnauthorized: false },
+      ssl: "require",
       max: 1,              // Single connection per Lambda instance (Lambda is single-threaded)
       idle_timeout: 20,    // Close idle connections after 20 seconds
       connect_timeout: 10, // Timeout connection attempts after 10 seconds
