@@ -2150,7 +2150,7 @@ paths:
     get:
       tags:
         - Instructor
-      summary: Get instructor name
+      summary: Get assigned student first name
       operationId: instructor_get_name_GET
       parameters:
         - in: query
@@ -2158,7 +2158,7 @@ paths:
           required: true
           schema:
             type: string
-          description: The email of the instructor
+          description: Email of a student assigned to the calling instructor
       responses:
         "200":
           description: Instructor name

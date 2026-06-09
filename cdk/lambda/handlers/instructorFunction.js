@@ -229,7 +229,7 @@ const routes = {
     }
   },
   "GET /instructor/name": async (event, env) => {
-    const { response, sqlConnection } = env;
+    const { response, user, sqlConnection } = env;
     if (!event.queryStringParameters?.user_email) {
       response.statusCode = 400;
       response.body = JSON.stringify({
@@ -240,12 +240,17 @@ const routes = {
     const user_email = event.queryStringParameters.user_email;
     try {
       const userData = await sqlConnection`
-            SELECT first_name FROM "users" WHERE user_email = ${user_email};
+            SELECT u.first_name
+            FROM "users" u
+            INNER JOIN "instructor_students" i ON i.student_id = u.user_id
+            WHERE u.user_email = ${user_email}
+              AND i.instructor_id = ${user.user_id};
           `;
 
       if (userData.length > 0) {
         response.body = JSON.stringify({ name: userData[0].first_name });
       } else {
+        // Uniform 404 avoids confirming whether an email is registered
         response.statusCode = 404;
         response.body = JSON.stringify({ error: "User not found" });
       }

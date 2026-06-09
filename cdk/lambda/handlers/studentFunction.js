@@ -97,31 +97,6 @@ const routes = {
       handleError(err, response);
     }
   },
-  "GET /student/get_name": async (event, env) => {
-    const { response, sqlConnection } = env;
-    if (event.queryStringParameters && event.queryStringParameters.user_email) {
-      const user_email = event.queryStringParameters.user_email;
-      try {
-        // Retrieve roles for the user with the provided email
-        const userData = await sqlConnection`
-                  SELECT first_name
-                  FROM "users"
-                  WHERE user_email = ${user_email};
-                `;
-        if (userData.length > 0) {
-          response.body = JSON.stringify({ name: userData[0].first_name });
-        } else {
-          response.statusCode = 404;
-          response.body = JSON.stringify({ error: "User not found" });
-        }
-      } catch (err) {
-        handleError(err, response);
-      }
-    } else {
-      response.statusCode = 400;
-      response.body = JSON.stringify({ error: "User email is required" });
-    }
-  },
   "GET /student/get_summaries": async (event, env) => {
     const { response, user_id, sqlConnection } = env;
     if (event.queryStringParameters && event.queryStringParameters.case_id) {
@@ -206,34 +181,20 @@ const routes = {
   },
   "GET /student/message_limit": async (event, env) => {
     const { response } = env;
-    if (event.queryStringParameters && event.queryStringParameters.user_id) {
-      try {
-        console.log("Message limit name: ", MESSAGE_LIMIT);
-        const { SSMClient, GetParameterCommand } =
-          await import("@aws-sdk/client-ssm");
+    try {
+      const { SSMClient, GetParameterCommand } =
+        await import("@aws-sdk/client-ssm");
 
-        const ssm = new SSMClient();
+      const ssm = new SSMClient();
+      const result = await ssm.send(
+        new GetParameterCommand({ Name: MESSAGE_LIMIT }),
+      );
 
-        console.log("Fetching message limit from SSM parameter store...");
-
-        const result = await ssm.send(
-          new GetParameterCommand({ Name: MESSAGE_LIMIT }),
-        );
-
-        console.log(
-          "Message limit fetched successfully:",
-          result.Parameter.Value,
-        );
-
-        response.statusCode = 200;
-        response.body = JSON.stringify({ value: result.Parameter.Value });
-      } catch (err) {
-        console.error("Failed to fetch message limit:", err);
-        handleError(err, response);
-      }
-    } else {
-      response.statusCode = 400;
-      response.body = JSON.stringify({ error: "User ID is required" });
+      response.statusCode = 200;
+      response.body = JSON.stringify({ value: result.Parameter.Value });
+    } catch (err) {
+      console.error("Failed to fetch message limit:", err);
+      handleError(err, response);
     }
   },
   "GET /student/file_size_limit": async (event, env) => {
