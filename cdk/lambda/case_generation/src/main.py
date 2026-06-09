@@ -250,7 +250,7 @@ def _handle_guardrail_error(resp, event=None):
 
 
 @metrics.log_metrics(capture_cold_start_metric=True)
-@logger.inject_lambda_context(log_event=True)
+@logger.inject_lambda_context(log_event=False)
 def handler(event, context):
     try:
         initialize_case_types()

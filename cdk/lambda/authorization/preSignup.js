@@ -65,7 +65,7 @@ exports.handler = async (event) => {
       throw new UserError(`Invalid email address provided: ${email}`);
     }
     const emailDomain = parts.slice(1).join("@").trim().toLowerCase();
-    logger.info("Signup request", { email, emailDomain });
+    logger.info("Signup request", { emailDomain });
 
     const isDomainAllowed = allowedDomains.some((allowed) => {
       if (allowed === "*") return true;
@@ -95,14 +95,13 @@ exports.handler = async (event) => {
         );
 
         if (!whitelistResult.Item) {
-          logger.error("Email not in whitelist", { email });
+          logger.error("Email not in whitelist");
           throw new UserError(
             `Signup not allowed: your email (${email}) is not on the access list. Please contact an administrator.`,
           );
         }
 
         logger.info("Email found in whitelist", {
-          email,
           role: whitelistResult.Item.canonical_role?.S,
         });
       }

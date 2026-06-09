@@ -50,7 +50,7 @@ async function initializeConnection(SM_DB_CREDENTIALS, RDS_PROXY_ENDPOINT) {
     // Parse JSON credentials from secret
     credentials = JSON.parse(secretResponse.SecretString);
 
-    logger.info("Connecting to database", { username: credentials.username });
+    logger.info("Connecting to database via RDS Proxy");
 
     // Create PostgreSQL connection with pool configuration matching authorizer settings
     global.sqlConnection = postgres({

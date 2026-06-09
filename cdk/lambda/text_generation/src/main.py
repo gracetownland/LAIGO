@@ -323,7 +323,7 @@ def get_case_details(case_id):
 
 
 @metrics.log_metrics(capture_cold_start_metric=True)
-@logger.inject_lambda_context(log_event=True)
+@logger.inject_lambda_context(log_event=False)
 def handler(event, context):
     #logger.info("Text Generation Lambda function is called!")
     initialize_constants()
@@ -374,7 +374,7 @@ def handler(event, context):
         student_query = get_initial_student_query(case_type, jurisdiction, case_description)
         
     else:
-        logger.info(f"Processing student question: {question}")
+        logger.info("Processing student question", questionLength=len(question.strip()))
         student_query = question.strip()
 
         # Use guardrail from CDK environment variables
@@ -561,8 +561,11 @@ def handler(event, context):
                 jurisdiction=jurisdiction,
                 case_description=case_description,
             )
-            print("response: ", response)
-        
+            logger.info(
+                "AI response generated",
+                responseLength=len(str(response or "")),
+            )
+
     except Exception as e:
         logger.error(f"Error getting response from AI: {e}")
         # For WebSocket errors, try to send error message to client

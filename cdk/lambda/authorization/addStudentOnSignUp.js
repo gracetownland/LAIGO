@@ -56,7 +56,7 @@ async function getWhitelistRole(email) {
     );
     return result?.Item?.canonical_role?.S || null;
   } catch (err) {
-    logger.warn("Could not read whitelist entry from DynamoDB", { email, err });
+    logger.warn("Could not read whitelist entry from DynamoDB", { err });
     return null;
   }
 }
@@ -123,7 +123,7 @@ exports.handler = async (event) => {
 
     if (existingUser.length > 0) {
       // Update existing user's information
-      logger.info("Updating existing user in database", { email });
+      logger.info("Updating existing user in database");
       await sqlConnection`
         UPDATE "users"
         SET
@@ -135,7 +135,6 @@ exports.handler = async (event) => {
         RETURNING *;
       `;
 
-      console.log(`User ${email} updated in database`);
     } else {
       // Determine the role for the new user
       let defaultRole;
@@ -148,22 +147,24 @@ exports.handler = async (event) => {
 
       if (isFirstUser) {
         defaultRole = "admin";
-        logger.info("First user in system, assigning admin role", { email });
+        logger.info("First user in system, assigning admin role");
       } else {
         // Check signup mode to determine role
         const signupMode = await getSignupMode();
-        logger.info("New user signup", { email, signupMode });
+        logger.info("New user signup", { signupMode });
 
         if (signupMode === "whitelist") {
           // Look up the canonical role from the DynamoDB whitelist
           const whitelistRole = await getWhitelistRole(email);
           if (whitelistRole) {
             defaultRole = whitelistRole;
-            logger.info("Assigning role from whitelist", { email, defaultRole });
+            logger.info("Assigning role from whitelist", { defaultRole });
           } else {
             // Fallback: whitelist check in preSignup should have blocked this,
             // but defensively default to student if something slips through
-            logger.warn("Email not in whitelist during post-confirmation, defaulting to student", { email });
+            logger.warn(
+              "Email not in whitelist during post-confirmation, defaulting to student",
+            );
             defaultRole = "student";
           }
         } else {
@@ -173,7 +174,6 @@ exports.handler = async (event) => {
       }
 
       logger.info("Creating new user in database", {
-        email,
         role: defaultRole,
         isFirstUser,
       });
@@ -185,7 +185,7 @@ exports.handler = async (event) => {
         RETURNING *;
       `;
 
-      logger.info("New user created", { email, role: defaultRole });
+      logger.info("New user created", { role: defaultRole });
     }
 
     // Return event to continue post-confirmation flow

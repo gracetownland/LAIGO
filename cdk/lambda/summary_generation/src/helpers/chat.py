@@ -126,7 +126,7 @@ def _invoke_model_text(llm: dict, system_prompt: str, user_prompt: str) -> str:
     )
     payload = json.loads(response["body"].read())
     result = _extract_response_text(llm["model_id"], payload)
-    logger.info(f"Model response length: {len(result)}, first 200 chars: {result[:200]}")
+    logger.info("Model response received", extra={"responseLength": len(result)})
     if not result:
         logger.warning(f"Empty model response. Payload keys: {list(payload.keys())}, payload preview: {json.dumps(payload)[:500]}")
     return result

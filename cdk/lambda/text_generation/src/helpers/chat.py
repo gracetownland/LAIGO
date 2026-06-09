@@ -307,7 +307,7 @@ def get_streaming_response(
                 Data=json.dumps(message).encode('utf-8')
             )
         except Exception as e:
-            print(f"Error sending to WebSocket: {e}")
+            _chat_logger.warning("Error sending to WebSocket", exc_info=True)
 
     # Create a system prompt for the question answering
     case_context = {
@@ -437,7 +437,7 @@ def update_session_name(table_name: str, session_id: str, bedrock_llm_id: str) -
             }
         )
     except Exception as e:
-        print(f"Error fetching conversation history from DynamoDB: {e}")
+        _chat_logger.warning("Error fetching conversation history from DynamoDB", exc_info=True)
         return None
 
     history = response.get('Item', {}).get('History', {}).get('L', [])
@@ -456,17 +456,17 @@ def update_session_name(table_name: str, session_id: str, bedrock_llm_id: str) -
         if message_type == 'human':
             human_messages.append(item)
             if len(human_messages) > 2:
-                print("More than one student message found; not the first exchange.")
+                _chat_logger.warning("More than one student message found; not the first exchange.")
                 return None
         
         elif message_type == 'ai':
             ai_messages.append(item)
             if len(ai_messages) > 2:
-                print("More than one AI message found; not the first exchange.")
+                _chat_logger.warning("More than one AI message found; not the first exchange.")
                 return None
 
     if len(human_messages) != 2 or len(ai_messages) != 2:
-        print("Not a complete first exchange between the LLM and student.")
+        _chat_logger.warning("Not a complete first exchange between the LLM and student.")
         return None
     
     student_message = human_messages[0].get('M', {}).get('data', {}).get('M', {}).get('content', {}).get('S', "")

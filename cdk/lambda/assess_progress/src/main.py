@@ -730,7 +730,7 @@ def send_to_websocket(connection_id, endpoint, request_id, msg_type, content=Non
         logger.error(f"Error sending to WebSocket: {e}")
 
 @metrics.log_metrics(capture_cold_start_metric=True)
-@logger.inject_lambda_context(log_event=True)
+@logger.inject_lambda_context(log_event=False)
 def handler(event, context):
     logger.info("Assess Progress Lambda function started")
     
@@ -762,7 +762,7 @@ def handler(event, context):
     # Parse body
     try:
         body = json.loads(event.get("body", "{}"))
-        logger.debug(f"Request body: {body}")
+        logger.debug("Request received", bodyKeys=list(body.keys()))
     except json.JSONDecodeError:
         logger.error("Failed to decode JSON body")
         return create_response(400, 'Invalid JSON body', event)
@@ -817,10 +817,16 @@ def handler(event, context):
             result, response_text = _invoke_assessment_with_retry(system_instructions, human_context, max_attempts=2)
             duration = time.time() - start_time
             logger.info(f"Playground assessment took {duration:.2f}s")
-            logger.info(f"Playground LLM Response: {response_text}")
+            logger.info(
+                "Playground LLM response received",
+                responseLength=len(response_text or ""),
+            )
             
             if result is None:
-                logger.error(f"Failed to parse playground LLM response after retries: {response_text}")
+                logger.error(
+                    "Failed to parse playground LLM response after retries",
+                    responseLength=len(response_text or ""),
+                )
                 error_data = {'unlocked': False, 'progress': 0, 'reasoning': 'Error parsing assessment result.'}
                 if is_websocket and connection_id:
                     send_to_websocket(connection_id, ws_endpoint, request_id, "complete", data=error_data)
@@ -914,10 +920,16 @@ def handler(event, context):
         result, response_text = _invoke_assessment_with_retry(system_instructions, human_context, max_attempts=2)
         duration = time.time() - start_time
         logger.info(f"Bedrock invocation took {duration:.2f}s")
-        logger.info(f"LLM Assessment Response: {response_text}")
+        logger.info(
+            "LLM assessment response received",
+            responseLength=len(response_text or ""),
+        )
         
         if result is None:
-            logger.error(f"Failed to parse LLM response as JSON after retries: {response_text}")
+            logger.error(
+                "Failed to parse LLM response as JSON after retries",
+                responseLength=len(response_text or ""),
+            )
             error_data = {'unlocked': False, 'progress': 0, 'reasoning': 'Error parsing assessment result.'}
             if is_websocket and connection_id:
                 send_to_websocket(connection_id, ws_endpoint, request_id, "complete", data=error_data)

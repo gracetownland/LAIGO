@@ -16,7 +16,7 @@ let userMetadataCache = {};
 async function getUserMetadataFromDatabase(idpId) {
   // Check cache first
   if (userMetadataCache[idpId]) {
-    logger.info("Using cached user metadata", { idpId });
+    logger.info("Using cached user metadata");
     return userMetadataCache[idpId];
   }
 
@@ -53,7 +53,6 @@ async function getUserMetadataFromDatabase(idpId) {
     return user;
   } catch (error) {
     logger.error("Database query failed", {
-      idpId,
       errorType: error.name,
       errorMessage: error.message,
     });
@@ -107,7 +106,6 @@ exports.handler = async (event) => {
       user = await getUserMetadataFromDatabase(idpId);
     } catch (error) {
       logger.error("User lookup failed", {
-        idpId,
         errorType: error.name,
         errorMessage: error.message,
         timestamp,

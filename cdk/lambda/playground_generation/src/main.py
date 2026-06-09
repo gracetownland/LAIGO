@@ -104,7 +104,7 @@ You are NOT allowed to hallucinate, informational accuracy and being up-to-date 
 
 Do not indent your text.'''
 
-@logger.inject_lambda_context(log_event=True)
+@logger.inject_lambda_context(log_event=False)
 def handler(event, context):
     logger.info("Playground Generation Lambda function is called!")
     initialize_constants()

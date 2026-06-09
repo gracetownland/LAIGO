@@ -108,7 +108,6 @@ const routes = {
                   FROM "users"
                   WHERE user_email = ${user_email};
                 `;
-        console.log(userData);
         if (userData.length > 0) {
           response.body = JSON.stringify({ name: userData[0].first_name });
         } else {
@@ -166,7 +165,6 @@ const routes = {
   },
   "DELETE /student/delete_summary": async (event, env) => {
     const { response, user_id, sqlConnection } = env;
-    console.log(event);
     if (
       event.queryStringParameters != null &&
       event.queryStringParameters.summary_id
@@ -1226,7 +1224,6 @@ const routes = {
   "DELETE /student/delete_transcription": async (event, env) => {
     const { response, user_id, sqlConnection } = env;
     // Use user_id from database user metadata for ownership check
-    logger.info(event);
     if (
       event.queryStringParameters != null &&
       event.queryStringParameters.audio_file_id
@@ -1558,7 +1555,10 @@ const routes = {
 
 exports.handler = async (event, context) => {
   logger.addContext(context);
-  logger.info(event);
+  logger.info("Student request", {
+    httpMethod: event.httpMethod,
+    resource: event.resource,
+  });
 
   // Extract userId and user metadata from authorization context
   const userId = event.requestContext?.authorizer?.userId || null;

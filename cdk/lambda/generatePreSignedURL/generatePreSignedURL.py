@@ -49,7 +49,7 @@ def create_response(status_code, body, event=None):
     }
 
 
-@logger.inject_lambda_context(log_event=True)
+@logger.inject_lambda_context(log_event=False)
 def lambda_handler(event, context):
     # Use .get() to safely extract query string parameters
     query_params = event.get("queryStringParameters", {})
