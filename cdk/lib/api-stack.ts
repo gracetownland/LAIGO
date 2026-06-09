@@ -101,6 +101,12 @@ export class ApiGatewayStack extends cdk.Stack {
     // Determine environment for conditional configuration
     const isProd = this.node.tryGetContext("Environment") === "production";
 
+    if (isProd && !props.domainName) {
+      throw new Error(
+        "DomainName context is required for production deployments so CORS is restricted to your frontend origin (pass -c DomainName=your.domain).",
+      );
+    }
+
     // Initialize Lambda layers collection
     this.layerList = {};
 

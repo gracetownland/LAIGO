@@ -445,24 +445,14 @@ def handler(event, context):
         # Unified Authorization Check
         if not user_id:
             logger.error("Authorization failed: Missing user identity")
-            error_body = json.dumps({"error": "Unauthorized: Missing user identity"})
             if is_websocket:
                  return {"statusCode": 401, "body": "Unauthorized"}
             else:
-                 return {
-                    'statusCode': 401,
-                    "headers": {
-                        "Content-Type": "application/json",
-                        "Access-Control-Allow-Headers": "*",
-                        "Access-Control-Allow-Origin": "*",
-                        "Access-Control-Allow-Methods": "*",
-                        "X-Content-Type-Options": "nosniff",
-                        "X-Frame-Options": "DENY",
-                        "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none';",
-                        "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
-                    },
-                    "body": error_body
-                }
+                 return create_response(
+                     401,
+                     {"error": "Unauthorized: Missing user identity"},
+                     event,
+                 )
 
         if not check_authorization(user_id, case_id):
             logger.error(
@@ -584,20 +574,7 @@ def handler(event, context):
 
 
     logger.info("Returning the generated response.")
-    return {
-        "statusCode": 200,
-        "headers": {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Headers": "*",
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "*",
-            "X-Content-Type-Options": "nosniff",
-            "X-Frame-Options": "DENY",
-            "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none';",
-            "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
-        },
-        "body": json.dumps(response)
-    }
+    return create_response(200, response, event)
 
 
     

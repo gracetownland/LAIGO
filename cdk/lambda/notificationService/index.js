@@ -665,6 +665,8 @@ function generateNotificationId() {
   return `notif_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+let corsWildcardWarned = false;
+
 /**
  * Resolves the CORS origin based on the ALLOWED_ORIGIN env var.
  * Mirrors getOriginHeader() in cdk/lambda/handlers/utils/utils.js.
@@ -675,6 +677,12 @@ function generateNotificationId() {
 function getOriginHeader(event) {
   const allowedOrigin = process.env.ALLOWED_ORIGIN;
   if (!allowedOrigin) {
+    if (!corsWildcardWarned) {
+      logger.warn(
+        "ALLOWED_ORIGIN is unset; CORS responses use Access-Control-Allow-Origin: *",
+      );
+      corsWildcardWarned = true;
+    }
     return "*";
   }
 

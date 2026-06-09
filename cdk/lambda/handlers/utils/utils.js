@@ -10,10 +10,12 @@ const initConnection = async () => {
   }
 };
 
+let corsWildcardWarned = false;
+
 /**
  * Resolves the CORS origin for a response based on the ALLOWED_ORIGIN env var.
  *
- * - If ALLOWED_ORIGIN is not set, returns "*" (wildcard fallback).
+ * - If ALLOWED_ORIGIN is not set, returns "*" (wildcard fallback for local/dev).
  * - If ALLOWED_ORIGIN is set, returns that value.
  *
  * @param {object} event - The Lambda event object (optional, pass {} if unavailable)
@@ -22,6 +24,12 @@ const initConnection = async () => {
 const getOriginHeader = (event) => {
   const allowedOrigin = process.env.ALLOWED_ORIGIN;
   if (!allowedOrigin) {
+    if (!corsWildcardWarned) {
+      logger.warn(
+        "ALLOWED_ORIGIN is unset; CORS responses use Access-Control-Allow-Origin: *",
+      );
+      corsWildcardWarned = true;
+    }
     return "*";
   }
 
