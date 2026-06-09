@@ -5,10 +5,23 @@ const {
 } = require("@aws-sdk/client-secrets-manager");
 const { Client } = require("pg");
 const crypto = require("crypto");
+const fs = require("fs");
 const path = require("path");
 const migrate = require("node-pg-migrate").default;
 
 const sm = new SecretsManagerClient();
+
+const RDS_CA_BUNDLE_PATH =
+  process.env.RDS_CA_BUNDLE_PATH ||
+  path.join(__dirname, "certs", "global-bundle.pem");
+
+let rdsCaCert;
+function getRdsCaCert() {
+  if (!rdsCaCert) {
+    rdsCaCert = fs.readFileSync(RDS_CA_BUNDLE_PATH);
+  }
+  return rdsCaCert;
+}
 
 function dbConnectionConfig(secret, hostOverride) {
   return {
@@ -17,7 +30,10 @@ function dbConnectionConfig(secret, hostOverride) {
     host: hostOverride || secret.host,
     database: secret.dbname,
     port: secret.port || 5432,
-    ssl: { rejectUnauthorized: false },
+    ssl: {
+      ca: getRdsCaCert(),
+      rejectUnauthorized: true,
+    },
   };
 }
 
