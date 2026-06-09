@@ -6,6 +6,41 @@ import * as logs from "aws-cdk-lib/aws-logs";
 import { Fn } from "aws-cdk-lib";
 import { applyStandardTags } from "./shared/tagging";
 
+const lambdaEgressSubnets: ec2.SubnetSelection = {
+  subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
+};
+
+function addLambdaPrivateNetworkEndpoints(
+  vpc: ec2.IVpc,
+  idPrefix: string,
+  options: { includeSsm?: boolean } = {},
+): void {
+  vpc.addGatewayEndpoint(`${idPrefix}-S3GatewayEndpoint`, {
+    service: ec2.GatewayVpcEndpointAwsService.S3,
+  });
+
+  vpc.addGatewayEndpoint(`${idPrefix}-DynamoDbGatewayEndpoint`, {
+    service: ec2.GatewayVpcEndpointAwsService.DYNAMODB,
+  });
+
+  vpc.addInterfaceEndpoint(`${idPrefix}-BedrockRuntimeEndpoint`, {
+    service: ec2.InterfaceVpcEndpointAwsService.BEDROCK_RUNTIME,
+    subnets: lambdaEgressSubnets,
+  });
+
+  if (options.includeSsm) {
+    vpc.addInterfaceEndpoint(`${idPrefix}-SsmEndpoint`, {
+      service: ec2.InterfaceVpcEndpointAwsService.SSM,
+      subnets: lambdaEgressSubnets,
+    });
+
+    vpc.addInterfaceEndpoint(`${idPrefix}-SsmMessagesEndpoint`, {
+      service: ec2.InterfaceVpcEndpointAwsService.SSM_MESSAGES,
+      subnets: lambdaEgressSubnets,
+    });
+  }
+}
+
 export class VpcStack extends Stack {
   public readonly vpc: ec2.Vpc;
   public readonly vpcCidrString: string;
@@ -159,6 +194,8 @@ export class VpcStack extends Stack {
         privateDnsEnabled: false, // Disable private DNS to avoid conflicts
       });
 
+      addLambdaPrivateNetworkEndpoints(this.vpc, id);
+
       // Enhanced VPC Flow Log with custom format and explicit retention
       const flowLogGroupExisting = new logs.LogGroup(this, 'FlowLogGroupExisting', {
         logGroupName: `/vpc/flow-logs/${id}-existing`,
@@ -261,6 +298,8 @@ export class VpcStack extends Stack {
         service: ec2.InterfaceVpcEndpointAwsService.RDS,
         subnets: { subnetType: ec2.SubnetType.PRIVATE_ISOLATED },
       });
+
+      addLambdaPrivateNetworkEndpoints(this.vpc, id, { includeSsm: true });
     }
   }
 }
