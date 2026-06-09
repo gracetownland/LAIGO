@@ -6,6 +6,7 @@ const {
   getSqlConnection,
 } = require("./utils/utils");
 const { PERMISSION_MODELS, authorizeCaseAccess } = require("./utils/authorization");
+const { deleteChatHistory } = require("./utils/deleteChatHistory");
 const { Logger } = require("@aws-lambda-powertools/logger");
 const logger = new Logger({ serviceName: "InstructorFunction" });
 
@@ -435,12 +436,15 @@ const routes = {
         return;
       }
 
-      // Delete case_reviewers first because it lacks ON DELETE CASCADE
-      await sqlConnection`
-            DELETE FROM "case_reviewers" WHERE case_id = ${deleteCaseId};
-          `;
+      const tableName = process.env.TABLE_NAME;
+      if (!tableName) {
+        throw new Error("TABLE_NAME is not configured");
+      }
 
-      // Delete case
+      // Remove privileged AI chat content before deleting the case record
+      await deleteChatHistory(tableName, deleteCaseId);
+
+      // PostgreSQL child rows cascade via FK constraints (including case_reviewers)
       await sqlConnection`
             DELETE FROM "cases" WHERE case_id = ${deleteCaseId};
           `;

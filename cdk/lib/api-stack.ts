@@ -1638,6 +1638,7 @@ export class ApiGatewayStack extends cdk.Stack {
           MESSAGE_LIMIT: messageLimitParameter.parameterName,
           FILE_SIZE_LIMIT: fileSizeLimitParameter.parameterName,
           NOTIFICATION_EVENT_BUS_NAME: notificationEventBus.eventBusName,
+          TABLE_NAME: `${id}-Conversation-Table`,
           ...corsEnv,
         },
         functionName: `${id}-instructorFunction`,
@@ -1649,6 +1650,8 @@ export class ApiGatewayStack extends cdk.Stack {
 
     // Grant RDS Proxy connect permission to instructor function
     db.dbInstance.grantConnect(lambdaInstructorFunction, "applicationUsername");
+
+    chatHistoryTable.grantReadWriteData(lambdaInstructorFunction);
 
     // Add the permission to the Lambda function's policy to allow API Gateway access
     lambdaInstructorFunction.addPermission("AllowApiGatewayInvoke", {
