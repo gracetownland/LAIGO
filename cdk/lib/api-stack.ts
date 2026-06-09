@@ -96,6 +96,8 @@ export class ApiGatewayStack extends cdk.Stack {
     super(scope, id, props);
     applyStandardTags(this, "API");
 
+    const dbClientSg = db.dbClientSecurityGroup;
+
     // Determine environment for conditional configuration
     const isProd = this.node.tryGetContext("Environment") === "production";
 
@@ -739,7 +741,7 @@ export class ApiGatewayStack extends cdk.Stack {
         timeout: Duration.seconds(10),
         vpc: vpcStack.vpc, // VPC access for database connectivity
         vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
-        securityGroups: [db.dbInstance.connections.securityGroups[0]],
+        securityGroups: [dbClientSg],
         tracing: lambda.Tracing.ACTIVE,
         environment: {
           SM_IDP_CREDENTIALS: this.secret.secretName, // IDP config from Secrets Manager (Cognito initially)
@@ -781,7 +783,7 @@ export class ApiGatewayStack extends cdk.Stack {
         timeout: Duration.seconds(10),
         vpc: vpcStack.vpc, // VPC access for database connectivity
         vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
-        securityGroups: [db.dbInstance.connections.securityGroups[0]],
+        securityGroups: [dbClientSg],
         tracing: lambda.Tracing.ACTIVE,
         memorySize: 256,
         layers: [jwt, postgres, javascriptPowertoolsLayer], // JWT verification library + PostgreSQL client
@@ -822,7 +824,7 @@ export class ApiGatewayStack extends cdk.Stack {
         timeout: Duration.seconds(10),
         vpc: vpcStack.vpc,
         vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
-        securityGroups: [db.dbInstance.connections.securityGroups[0]],
+        securityGroups: [dbClientSg],
         tracing: lambda.Tracing.ACTIVE,
         memorySize: 256,
         layers: [jwt, postgres, javascriptPowertoolsLayer], // JWT verification library + PostgreSQL client
@@ -975,6 +977,8 @@ export class ApiGatewayStack extends cdk.Stack {
         code: lambda.Code.fromAsset("lambda/authorization"),
         timeout: Duration.seconds(29),
         vpc: vpcStack.vpc, // VPC access for database connectivity
+        vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+        securityGroups: [dbClientSg],
         environment: {
           SM_DB_CREDENTIALS: db.secretPathUser.secretName, // Database user credentials
           RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint, // RDS Proxy for connection pooling
@@ -1441,6 +1445,8 @@ export class ApiGatewayStack extends cdk.Stack {
         code: lambda.Code.fromAsset("lambda/handlers"),
         timeout: Duration.seconds(29),
         vpc: vpcStack.vpc,
+        vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+        securityGroups: [dbClientSg],
         tracing: lambda.Tracing.ACTIVE,
         environment: {
           SM_DB_CREDENTIALS: db.secretPathUser.secretName,
@@ -1497,6 +1503,8 @@ export class ApiGatewayStack extends cdk.Stack {
         handler: "adminFunction.handler",
         timeout: Duration.seconds(29),
         vpc: vpcStack.vpc,
+        vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+        securityGroups: [dbClientSg],
         tracing: lambda.Tracing.ACTIVE,
         environment: {
           SM_DB_CREDENTIALS: db.secretPathTableCreator.secretName,
@@ -1610,6 +1618,8 @@ export class ApiGatewayStack extends cdk.Stack {
         handler: "instructorFunction.handler",
         timeout: Duration.seconds(29),
         vpc: vpcStack.vpc,
+        vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+        securityGroups: [dbClientSg],
         tracing: lambda.Tracing.ACTIVE,
         environment: {
           SM_DB_CREDENTIALS: db.secretPathUser.secretName,
@@ -1683,6 +1693,8 @@ export class ApiGatewayStack extends cdk.Stack {
         memorySize: 512,
         timeout: cdk.Duration.seconds(30),
         vpc: vpcStack.vpc,
+        vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+        securityGroups: [dbClientSg],
         functionName: `${id}-CaseLambdaDockerFunction`,
         tracing: lambda.Tracing.ACTIVE,
         environment: {
@@ -1758,6 +1770,8 @@ export class ApiGatewayStack extends cdk.Stack {
         memorySize: 1024,
         timeout: cdk.Duration.seconds(120),
         vpc: vpcStack.vpc,
+        vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+        securityGroups: [dbClientSg],
         functionName: `${id}-TextGenLambdaDockerFunction`,
         tracing: lambda.Tracing.ACTIVE,
         environment: {
@@ -1926,6 +1940,8 @@ export class ApiGatewayStack extends cdk.Stack {
         timeout: Duration.seconds(30),
         memorySize: 1024,
         vpc: vpcStack.vpc,
+        vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+        securityGroups: [dbClientSg],
         tracing: lambda.Tracing.ACTIVE,
         environment: {
           SM_DB_CREDENTIALS: db.secretPathUser.secretName,
@@ -2070,6 +2086,8 @@ export class ApiGatewayStack extends cdk.Stack {
         memorySize: 1024,
         timeout: cdk.Duration.seconds(120),
         vpc: vpcStack.vpc,
+        vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+        securityGroups: [dbClientSg],
         functionName: `${id}-audioToTextFunc`,
         environment: {
           AUDIO_BUCKET: audioStorageBucket.bucketName,
@@ -2167,6 +2185,8 @@ export class ApiGatewayStack extends cdk.Stack {
         timeout: Duration.seconds(120),
         memorySize: 1024,
         vpc: vpcStack.vpc,
+        vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+        securityGroups: [dbClientSg],
         tracing: lambda.Tracing.ACTIVE,
         environment: {
           SM_DB_CREDENTIALS: db.secretPathUser.secretName,
@@ -2284,7 +2304,7 @@ export class ApiGatewayStack extends cdk.Stack {
         functionName: `${id}-WsAuthorizer`,
         vpc: vpcStack.vpc, // VPC access for database connectivity
         vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
-        securityGroups: [db.dbInstance.connections.securityGroups[0]],
+        securityGroups: [dbClientSg],
         role: wsAuthorizerRole, // Dedicated least-privilege role for WebSocket authorizer
         environment: {
           JWT_ISSUER_ID: this.userPool.userPoolId, // IDP-agnostic: Cognito User Pool ID initially

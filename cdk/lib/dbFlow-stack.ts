@@ -2,6 +2,7 @@ import { Stack, StackProps, triggers } from "aws-cdk-lib";
 import { Construct } from "constructs";
 import { Duration } from "aws-cdk-lib";
 import * as lambda from "aws-cdk-lib/aws-lambda";
+import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as iam from "aws-cdk-lib/aws-iam";
 import { VpcStack } from "./vpc-stack";
 import { DatabaseStack } from "./database-stack";
@@ -92,6 +93,8 @@ export class DBFlowStack extends Stack {
         // as it disables TLS verification globally for all outbound connections.
       },
       vpc: db.dbInstance.vpc,
+      vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+      securityGroups: [db.dbClientSecurityGroup],
       code: lambda.Code.fromAsset("lambda/db_setup"),
       layers: [nodePgMigrateLayer],
       role: lambdaRole,

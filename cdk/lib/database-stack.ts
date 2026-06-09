@@ -31,6 +31,8 @@ export class DatabaseStack extends Stack {
   public readonly secretPathTableCreator: secretsmanager.Secret;
   // RDS proxy endpoint for connection pooling
   public readonly rdsProxyEndpoint: string;
+  // Shared security group for Lambdas that connect to RDS via the proxy
+  public readonly dbClientSecurityGroup: ec2.SecurityGroup;
 
   constructor(
     scope: Construct,
@@ -150,37 +152,25 @@ export class DatabaseStack extends Stack {
       parameterGroup: parameterGroup,
     });
 
-    // Configure security group rules for database access
-    const dbSecurityGroup = this.dbInstance.connections.securityGroups[0];
-
-    // Allow access from existing private subnets if VPC is being reused
-    if (
-      vpcStack.privateSubnetsCidrStrings &&
-      vpcStack.privateSubnetsCidrStrings.length > 0
-    ) {
-      vpcStack.privateSubnetsCidrStrings.forEach((cidr) => {
-        dbSecurityGroup.addIngressRule(
-          ec2.Peer.ipv4(cidr),
-          ec2.Port.tcp(5432), // PostgreSQL default port
-          `Allow PostgreSQL traffic from private subnet CIDR range ${cidr}`,
-        );
-      });
-    } else {
-      console.log(
-        "Deploying with new VPC. No need to add private subnet CIDR ranges to inbound rules of RDS.",
-      );
-    }
-
-    // Allow database access from anywhere within the VPC
-    this.dbInstance.connections.securityGroups.forEach(
-      function (securityGroup) {
-        securityGroup.addIngressRule(
-          ec2.Peer.ipv4(vpcStack.vpcCidrString), // Allow from entire VPC CIDR range
-          ec2.Port.tcp(5432),
-          "Allow PostgreSQL traffic from VPC",
-        );
+    // Security group assigned to Lambdas that legitimately need database access
+    this.dbClientSecurityGroup = new ec2.SecurityGroup(
+      this,
+      `${id}-DbClientSecurityGroup`,
+      {
+        vpc: vpcStack.vpc,
+        description:
+          "Lambda functions authorized to connect to RDS Proxy on port 5432",
       },
     );
+
+    this.dbInstance.connections.allowFrom(
+      this.dbClientSecurityGroup,
+      ec2.Port.tcp(5432),
+      "Allow PostgreSQL from authorized Lambda functions",
+    );
+
+    // RDS Proxy shares the database security group and must reach the instance
+    this.dbInstance.connections.allowInternally(ec2.Port.tcp(5432));
 
     // Create IAM role for RDS Proxy to manage database connections
     const rdsProxyRole = new iam.Role(this, `${id}-DBProxyRole`, {
