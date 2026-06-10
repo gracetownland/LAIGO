@@ -312,9 +312,9 @@ export class ApiGatewayStack extends cdk.Stack {
     this.appClient = this.userPool.addClient(`${id}-pool`, {
       userPoolClientName: userPoolName,
       authFlows: {
-        userPassword: true, // Enable username/password authentication
-        custom: true, // Enable custom authentication flows
-        userSrp: true, // Enable Secure Remote Password protocol
+        userPassword: false, // Disabled: SRP is preferred; plaintext password over TLS is unnecessary (AUTH-CUP-03)
+        custom: false, // Disabled: no custom auth Lambda triggers are attached (AUTH-CUP-06)
+        userSrp: true, // Secure Remote Password protocol — password never leaves client
       },
       accessTokenValidity: cdk.Duration.minutes(30),
       idTokenValidity: cdk.Duration.minutes(30),
