@@ -60,6 +60,14 @@ def sanitize_prompt_input(user_input: str) -> tuple[str, bool]:
           The content is still returned (stripped of control chars) so the
           caller can decide whether to proceed or reject.
     """
+    if user_input is None:
+        return ("", False)
+
+    if isinstance(user_input, list):
+        user_input = ", ".join(str(item) for item in user_input)
+    elif not isinstance(user_input, str):
+        user_input = str(user_input)
+
     if not user_input:
         return ("", False)
 
