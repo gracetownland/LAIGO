@@ -616,6 +616,13 @@ exports.handler = async (event, context) => {
     roles,
   };
 
+  // Defense-in-depth: verify instructor role at handler level (AUTH-RBAC-03)
+  if (!Array.isArray(roles) || !roles.includes("instructor")) {
+    response.statusCode = 403;
+    response.body = JSON.stringify({ error: "Forbidden" });
+    return response;
+  }
+
   const sqlConnection = getSqlConnection();
 
   try {

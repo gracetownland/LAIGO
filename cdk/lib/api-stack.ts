@@ -599,9 +599,9 @@ export class ApiGatewayStack extends cdk.Stack {
           createPolicyStatement(
             ["execute-api:Invoke"],
             [
-              `arn:aws:execute-api:${this.region}:${this.account}:${this.api.restApiId}/*/*/admin/*`,
-              `arn:aws:execute-api:${this.region}:${this.account}:${this.api.restApiId}/*/*/instructor/*`,
-              `arn:aws:execute-api:${this.region}:${this.account}:${this.api.restApiId}/*/*/student/*`,
+              `arn:aws:execute-api:${this.region}:${this.account}:${this.api.restApiId}/prod/*/admin/*`,
+              `arn:aws:execute-api:${this.region}:${this.account}:${this.api.restApiId}/prod/*/instructor/*`,
+              `arn:aws:execute-api:${this.region}:${this.account}:${this.api.restApiId}/prod/*/student/*`,
             ],
           ),
         ],
