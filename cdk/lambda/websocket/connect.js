@@ -67,7 +67,6 @@ exports.handler = async (event) => {
             connectionId: { S: connectionId },
             userId: { S: userId },
             connectedAt: { S: connectedAt },
-            lastActivity: { S: connectedAt },
             ttl: { N: ttl.toString() },
           },
         }),
@@ -86,14 +85,14 @@ exports.handler = async (event) => {
   // Connection valid (authorized by Lambda Authorizer)
   const response = { statusCode: 200, body: "Connected" };
 
-  // If the client sent a Sec-WebSocket-Protocol header (e.g. for auth), we must echo it back
+  // Echo a fixed protocol name instead of the raw token to avoid credential leakage in logs (AUTH-WS-04)
   const headers = event.headers || {};
   const protocolHeader =
     headers["Sec-WebSocket-Protocol"] || headers["sec-websocket-protocol"];
 
   if (protocolHeader) {
     response.headers = {
-      "Sec-WebSocket-Protocol": protocolHeader,
+      "Sec-WebSocket-Protocol": "chat.v1",
     };
   }
 
