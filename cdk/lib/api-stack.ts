@@ -1253,7 +1253,8 @@ export class ApiGatewayStack extends cdk.Stack {
     //   "DynamoDB-Conversation-Table",
     // );
 
-    // Create new conversation table for manual migration (identical schema)
+    // Conversation history stores privileged legal chat content.
+    // RETAIN on stack delete to prevent accidental data loss (same as email whitelist).
     const chatHistoryTable = new dynamodb.Table(
       this,
       `${id}-ConversationTable`,
@@ -1266,7 +1267,7 @@ export class ApiGatewayStack extends cdk.Stack {
         billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
         encryption: dynamodb.TableEncryption.AWS_MANAGED,
         pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
-        removalPolicy: isProd ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
+        removalPolicy: cdk.RemovalPolicy.RETAIN,
       },
     );
 
