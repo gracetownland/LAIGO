@@ -145,7 +145,7 @@ function extractToken(event) {
     return authHeader.slice("Bearer ".length).trim();
   }
 
-  // Check Sec-WebSocket-Protocol header
+  // Check Sec-WebSocket-Protocol header (primary browser path)
   const protocolHeader =
     headers["Sec-WebSocket-Protocol"] || headers["sec-websocket-protocol"];
   if (protocolHeader) {
@@ -154,11 +154,9 @@ function extractToken(event) {
     if (protocols.length > 0) return protocols[0];
   }
 
-  // Check query string parameter
-  const queryParams = event.queryStringParameters || {};
-  if (queryParams.token) {
-    return queryParams.token;
-  }
+  // Query string ?token= fallback REMOVED (AUTH-WS-01)
+  // Placing JWTs in URLs leaks credentials via CloudWatch logs, browser history, and proxy logs.
+  // Frontend uses Sec-WebSocket-Protocol exclusively; non-browser clients use Authorization header.
 
   return undefined;
 }
