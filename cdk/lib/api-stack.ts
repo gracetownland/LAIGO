@@ -98,6 +98,14 @@ export class ApiGatewayStack extends cdk.Stack {
 
     const dbClientSg = db.dbClientSecurityGroup;
 
+    // Holds the DatabaseStack RDS security-group export during migration to
+    // dbClientSecurityGroup. Remove after DatabaseStack and ApiStack deploy successfully.
+    new cdk.CfnOutput(this, "DbMigrationSecurityGroupRef", {
+      value: db.dbInstance.connections.securityGroups[0].securityGroupId,
+      description:
+        "Temporary cross-stack ref; delete after DB SG migration deploy completes",
+    });
+
     // Determine environment for conditional configuration
     const isProd = this.node.tryGetContext("Environment") === "production";
 

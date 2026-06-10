@@ -6,15 +6,8 @@ import * as logs from "aws-cdk-lib/aws-logs";
 import { Fn } from "aws-cdk-lib";
 import { applyStandardTags } from "./shared/tagging";
 
-const lambdaEgressSubnets: ec2.SubnetSelection = {
-  subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
-};
-
-function addLambdaPrivateNetworkEndpoints(
-  vpc: ec2.IVpc,
-  idPrefix: string,
-  options: { includeSsm?: boolean } = {},
-): void {
+/** Free gateway endpoints for S3 and DynamoDB (no hourly ENI charge). */
+function addGatewayEndpoints(vpc: ec2.IVpc, idPrefix: string): void {
   vpc.addGatewayEndpoint(`${idPrefix}-S3GatewayEndpoint`, {
     service: ec2.GatewayVpcEndpointAwsService.S3,
   });
@@ -22,23 +15,6 @@ function addLambdaPrivateNetworkEndpoints(
   vpc.addGatewayEndpoint(`${idPrefix}-DynamoDbGatewayEndpoint`, {
     service: ec2.GatewayVpcEndpointAwsService.DYNAMODB,
   });
-
-  vpc.addInterfaceEndpoint(`${idPrefix}-BedrockRuntimeEndpoint`, {
-    service: ec2.InterfaceVpcEndpointAwsService.BEDROCK_RUNTIME,
-    subnets: lambdaEgressSubnets,
-  });
-
-  if (options.includeSsm) {
-    vpc.addInterfaceEndpoint(`${idPrefix}-SsmEndpoint`, {
-      service: ec2.InterfaceVpcEndpointAwsService.SSM,
-      subnets: lambdaEgressSubnets,
-    });
-
-    vpc.addInterfaceEndpoint(`${idPrefix}-SsmMessagesEndpoint`, {
-      service: ec2.InterfaceVpcEndpointAwsService.SSM_MESSAGES,
-      subnets: lambdaEgressSubnets,
-    });
-  }
 }
 
 export class VpcStack extends Stack {
@@ -194,7 +170,7 @@ export class VpcStack extends Stack {
         privateDnsEnabled: false, // Disable private DNS to avoid conflicts
       });
 
-      addLambdaPrivateNetworkEndpoints(this.vpc, id);
+      addGatewayEndpoints(this.vpc, id);
 
       // Enhanced VPC Flow Log with custom format and explicit retention
       const flowLogGroupExisting = new logs.LogGroup(this, 'FlowLogGroupExisting', {
@@ -299,7 +275,7 @@ export class VpcStack extends Stack {
         subnets: { subnetType: ec2.SubnetType.PRIVATE_ISOLATED },
       });
 
-      addLambdaPrivateNetworkEndpoints(this.vpc, id, { includeSsm: true });
+      addGatewayEndpoints(this.vpc, id);
     }
   }
 }
