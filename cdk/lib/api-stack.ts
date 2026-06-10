@@ -1830,21 +1830,11 @@ export class ApiGatewayStack extends cdk.Stack {
     // Attach the corrected Bedrock policy to Lambda
     textGenLambdaDockerFunc.addToRolePolicy(bedrockPolicyStatement);
 
-    // Grant access to chat history table
+    // LangChain DynamoDBChatMessageHistory uses GetItem/PutItem/UpdateItem on this table only
     chatHistoryTable.grantReadWriteData(textGenLambdaDockerFunc);
 
     // Grant access to specific database secret (least-privilege: app user only)
     db.secretPathUser.grantRead(textGenLambdaDockerFunc);
-
-    // Grant access to DynamoDB actions
-    // ListTables requires wildcard resource
-    textGenLambdaDockerFunc.addToRolePolicy(
-      new iam.PolicyStatement({
-        effect: iam.Effect.ALLOW,
-        actions: ["dynamodb:ListTables"],
-        resources: ["*"],
-      }),
-    );
 
     // Grant access to SSM Parameter Store for specific parameters
     textGenLambdaDockerFunc.addToRolePolicy(
