@@ -24,16 +24,22 @@ function getRdsCaCert() {
 }
 
 function dbConnectionConfig(secret, hostOverride) {
+  const host = hostOverride || secret.host;
+  const useProxy =
+    Boolean(process.env.RDS_PROXY_ENDPOINT) &&
+    host === process.env.RDS_PROXY_ENDPOINT;
+
   return {
     user: secret.username,
     password: secret.password,
-    host: hostOverride || secret.host,
+    host,
     database: secret.dbname,
     port: secret.port || 5432,
-    ssl: {
-      ca: getRdsCaCert(),
-      rejectUnauthorized: true,
-    },
+    // RDS Proxy uses ACM certificates (public CA chain). The RDS CA bundle is for
+    // direct RDS instance connections only.
+    ssl: useProxy
+      ? { rejectUnauthorized: true }
+      : { ca: getRdsCaCert(), rejectUnauthorized: true },
   };
 }
 
