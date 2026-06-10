@@ -68,6 +68,7 @@ const cicd = new CICDStack(app, `${StackPrefix}-CICDStack`, {
   pathFilters: [
     "cdk/lambda/text_generation/**",
     "cdk/lambda/playground_generation/**",
+    "cdk/layers/bedrock_client/**",
   ],
 });
 

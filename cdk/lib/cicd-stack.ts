@@ -227,7 +227,7 @@ export class CICDStack extends cdk.Stack {
                 commands: [
                   // Build Docker image from the specified source directory
                   'echo "Building Docker image..."',
-                  `docker build -t $REPOSITORY_URI:$IMAGE_TAG $CODEBUILD_SRC_DIR/${lambda.sourceDir} -f $CODEBUILD_SRC_DIR/${lambda.sourceDir}/Dockerfile`,
+                  `docker build --platform linux/amd64 --provenance=false --sbom=false -t $REPOSITORY_URI:$IMAGE_TAG $CODEBUILD_SRC_DIR -f $CODEBUILD_SRC_DIR/${lambda.sourceDir}/Dockerfile`,
                 ],
               },
               post_build: {
