@@ -7,3 +7,4 @@ psycopg[binary]
 python-dotenv
 numpy>=2.1.0
 aws-lambda-powertools[all]
+idna>=3.15
