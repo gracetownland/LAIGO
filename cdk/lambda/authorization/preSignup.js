@@ -72,17 +72,34 @@ exports.handler = async (event) => {
       return allowed === emailDomain;
     });
 
+    // Guard: wildcard domain bypass should not be active in production (AUTH-CT-05)
+    if (allowedDomains.includes("*")) {
+      const environment = process.env.ENVIRONMENT || "production";
+      if (environment === "production") {
+        logger.error("CRITICAL: Wildcard domain allowlist detected in production");
+      } else {
+        logger.warn("Wildcard domain allowlist active — all domains permitted", { environment });
+      }
+    }
+
     if (!isDomainAllowed) {
       logger.error("Domain not allowed", { emailDomain, allowedDomains });
-      throw new UserError(`Signup not allowed for email domain: ${emailDomain}`);
+      throw new UserError("Signup is not available for this email address. Please contact an administrator.");
     }
 
     // ── Stage 2: Whitelist check (new) ───────────────────────────────────────
     if (signupModeParamName && whitelistTableName) {
-      const modeData = await ssmClient.send(
-        new GetParameterCommand({ Name: signupModeParamName }),
-      );
-      const signupMode = modeData?.Parameter?.Value || "public";
+      let signupMode;
+      try {
+        const modeData = await ssmClient.send(
+          new GetParameterCommand({ Name: signupModeParamName }),
+        );
+        signupMode = modeData?.Parameter?.Value || "public";
+      } catch (ssmError) {
+        // Fail-closed: if we can't determine signup mode, block signup rather than allowing unrestricted access (AUTH-CT-06)
+        logger.error("Failed to read SignupMode SSM param — failing closed", { error: ssmError });
+        throw new Error("Cannot determine signup mode. Signup blocked for safety.");
+      }
       logger.info("Signup mode", { signupMode });
 
       if (signupMode === "whitelist") {
@@ -97,7 +114,7 @@ exports.handler = async (event) => {
         if (!whitelistResult.Item) {
           logger.error("Email not in whitelist");
           throw new UserError(
-            `Signup not allowed: your email (${email}) is not on the access list. Please contact an administrator.`,
+            "Signup is not available for this email address. Please contact an administrator.",
           );
         }
 
