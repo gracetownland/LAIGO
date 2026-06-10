@@ -2644,11 +2644,6 @@ paths:
           required: true
           schema:
             type: string
-        - in: query
-          name: instructor_id
-          required: true
-          schema:
-            type: string
       requestBody:
         required: true
         content:

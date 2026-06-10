@@ -110,16 +110,16 @@ const CaseFeedback: React.FC = () => {
       setSubmitting(true);
       const session = await fetchAuthSession();
       const token = session.tokens?.idToken?.toString();
-      const userId = session.tokens?.accessToken?.payload.sub;
+      const instructorId = userInfo?.userId;
 
-      if (!token || !userId) {
+      if (!token || !instructorId) {
         showSnackbar("Authentication error", "error");
         return;
       }
 
-      // Backend now uses cognito_id from authorizer
+      // instructor_id satisfies API Gateway required query param; Lambda uses authorizer userId
       const response = await fetch(
-        `${import.meta.env.VITE_API_ENDPOINT}/instructor/send_feedback?case_id=${caseId}`,
+        `${import.meta.env.VITE_API_ENDPOINT}/instructor/send_feedback?case_id=${caseId}&instructor_id=${instructorId}`,
         {
           method: "PUT",
           headers: {
@@ -133,14 +133,23 @@ const CaseFeedback: React.FC = () => {
       );
 
       if (!response.ok) {
-        throw new Error("Failed to send feedback");
+        let errorMsg = "Failed to send feedback";
+        try {
+          const errorData = await response.json();
+          if (errorData.error) errorMsg = errorData.error;
+        } catch {
+          // ignore parse errors
+        }
+        throw new Error(errorMsg);
       }
 
       showSnackbar("Feedback sent successfully", "success");
       setNewFeedback("");
       loadFeedback(); // Refresh list
     } catch (err) {
-      showSnackbar("Failed to send feedback", "error");
+      const message =
+        err instanceof Error ? err.message : "Failed to send feedback";
+      showSnackbar(message, "error");
     } finally {
       setSubmitting(false);
     }
