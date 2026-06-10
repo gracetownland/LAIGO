@@ -177,10 +177,12 @@ exports.handler = async (event) => {
 
     // Enforce role membership — user must hold the admin role in the database.
     // Re-fetch once from DB before deny to avoid stale warm-cache role misses.
-    if (!user.roles || !user.roles.includes("admin")) {
+    const roles = Array.isArray(user.roles) ? user.roles : [];
+    if (!roles.includes("admin")) {
       user = await getUserMetadataFromDatabase(idpId, true);
+      const refreshedRoles = Array.isArray(user.roles) ? user.roles : [];
 
-      if (!user.roles || !user.roles.includes("admin")) {
+      if (!refreshedRoles.includes("admin")) {
         logger.warn("Access denied: user does not have admin role", {
           userId: user.user_id,
         });

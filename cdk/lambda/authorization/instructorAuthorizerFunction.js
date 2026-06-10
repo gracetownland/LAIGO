@@ -177,10 +177,12 @@ exports.handler = async (event) => {
 
     // Enforce role membership — user must hold the instructor role in the database.
     // Re-fetch once from DB before deny to avoid stale warm-cache role misses.
-    if (!user.roles || !user.roles.includes("instructor")) {
+    const roles = Array.isArray(user.roles) ? user.roles : [];
+    if (!roles.includes("instructor")) {
       user = await getUserMetadataFromDatabase(idpId, true);
+      const refreshedRoles = Array.isArray(user.roles) ? user.roles : [];
 
-      if (!user.roles || !user.roles.includes("instructor")) {
+      if (!refreshedRoles.includes("instructor")) {
         logger.warn("Access denied: user does not have instructor role", {
           userId: user.user_id,
         });
