@@ -67,11 +67,13 @@ const SupervisorHeader: React.FC = () => {
 
   const handleSignOut = async () => {
     try {
-      await signOut();
+      await signOut({ global: true }); // Revokes refresh token server-side (AUTH-TL-02)
       handleProfileClose();
-      // Reload or navigate to root to trigger auth state change
       window.location.href = "/";
     } catch (error) {
+      // Fallback to local signout if global fails (e.g., network error)
+      await signOut();
+      window.location.href = "/";
     }
   };
 

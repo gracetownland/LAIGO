@@ -66,12 +66,13 @@ const AdvocateHeader: React.FC = () => {
 
   const handleSignOut = async () => {
     try {
-      await signOut();
+      await signOut({ global: true }); // Revokes refresh token server-side (AUTH-TL-02)
       handleProfileClose();
       window.location.href = "/";
-
-      // Optionally, you can add navigation or other logic here
     } catch (error) {
+      // Fallback to local signout if global fails (e.g., network error)
+      await signOut();
+      window.location.href = "/";
     }
   };
 
