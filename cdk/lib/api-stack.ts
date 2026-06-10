@@ -2430,6 +2430,18 @@ export class ApiGatewayStack extends cdk.Stack {
       },
     });
 
+    // Associate WAF with WebSocket API stage — reuses existing WAF Web ACL (AUTH-WS-02)
+    // Provides IP reputation filtering, rate limiting, and known-bad-input blocking for $connect
+    const wsWafAssociation = new wafv2.CfnWebACLAssociation(
+      this,
+      `${id}-ws-waf-association`,
+      {
+        resourceArn: `arn:aws:apigateway:${this.region}::/apis/${this.wsApi.apiId}/stages/${this.wsStage.stageName}`,
+        webAclArn: waf.attrArn,
+      },
+    );
+    wsWafAssociation.node.addDependency(this.wsStage);
+
     // Grant TextGen Lambda permission to post messages back to WebSocket connections
     textGenLambdaDockerFunc.addToRolePolicy(
       new iam.PolicyStatement({
