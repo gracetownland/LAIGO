@@ -372,7 +372,61 @@ def handler(event, context):
     if not question:
         logger.info(f"Start of conversation. Creating conversation history table in DynamoDB.")
         student_query = get_initial_student_query(case_type, jurisdiction, case_description)
-        
+
+        # Apply guardrail to initial query (case context) — prevents PII/harmful content on first turn
+        guardrail_id = GUARDRAIL_ID
+        guardrail_version = GUARDRAIL_VERSION
+        try:
+            guard_response = bedrock_runtime.apply_guardrail(
+                guardrailIdentifier=guardrail_id,
+                guardrailVersion=guardrail_version,
+                source="INPUT",
+                content=[{"text": {"text": student_query, "qualifiers": ["guard_content"]}}]
+            )
+            if guard_response.get("action") == "GUARDRAIL_INTERVENED":
+                logger.info(f"Guardrail blocked initial case context: {json.dumps(guard_response)}")
+                error_message = "Sorry, I cannot process this case because it appears to contain content that violates our content policy. Please review the case details and try again."
+                for assessment in guard_response.get('assessments', []):
+                    if 'sensitiveInformationPolicy' in assessment:
+                        error_message = ("Sorry, I cannot process this case because it appears to contain personal information in the case details. "
+                                        "Please remove personal identifiable information (Names, Phone Numbers, Addresses, etc.) from the case description.")
+                        break
+
+                if is_websocket and connection_id:
+                    try:
+                        websocket_endpoint = os.environ.get("WEBSOCKET_API_ENDPOINT")
+                        if not websocket_endpoint:
+                            websocket_endpoint = f"https://{domain_name}/{stage}"
+                        apigw_client = boto3.client('apigatewaymanagementapi', endpoint_url=websocket_endpoint)
+                        apigw_client.post_to_connection(
+                            ConnectionId=connection_id,
+                            Data=json.dumps({"type": "error", "requestId": request_id, "action": "generate_text", "content": error_message}).encode('utf-8')
+                        )
+                        return {"statusCode": 200}
+                    except Exception as ws_error:
+                        logger.error(f"Failed to send guardrail error to WebSocket: {ws_error}")
+                        return {"statusCode": 500}
+                return create_response(400, {"error": error_message}, event)
+        except Exception as guardrail_error:
+            logger.error(f"Error applying guardrail to initial case context: {guardrail_error}")
+            # Fail closed — do not proceed without guardrail validation
+            error_message = "Unable to validate case content. Please try again later."
+            if is_websocket and connection_id:
+                try:
+                    websocket_endpoint = os.environ.get("WEBSOCKET_API_ENDPOINT")
+                    if not websocket_endpoint:
+                        websocket_endpoint = f"https://{domain_name}/{stage}"
+                    apigw_client = boto3.client('apigatewaymanagementapi', endpoint_url=websocket_endpoint)
+                    apigw_client.post_to_connection(
+                        ConnectionId=connection_id,
+                        Data=json.dumps({"type": "error", "requestId": request_id, "action": "generate_text", "content": error_message}).encode('utf-8')
+                    )
+                    return {"statusCode": 200}
+                except Exception as ws_error:
+                    logger.error(f"Failed to send guardrail error to WebSocket: {ws_error}")
+                    return {"statusCode": 500}
+            return create_response(503, {"error": error_message}, event)
+
     else:
         logger.info("Processing student question", questionLength=len(question.strip()))
         student_query = question.strip()

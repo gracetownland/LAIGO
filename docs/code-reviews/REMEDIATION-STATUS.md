@@ -23,9 +23,9 @@ Individual review files (`code-review-*.md`) include per-issue **Status** lines 
 | S-H3 | WebSocket API no throttling | ✅ Fixed | Stage throttle configured: 100 rps rate, 200 burst |
 | S-H4 | `dataTraceEnabled` logs bodies | ⏸ Deferred | Re-enabled (`true`) during development for debugging; disable before production |
 | S-H5 | Localhost in production S3 CORS | ✅ Fixed | `localhost:5173` excluded from S3 CORS origins in production; only included in development |
-| S-H6 | Guardrail bypass on first turn | ⬜ Open | Guardrail only applied in `else` branch (subsequent turns); first turn skips guardrail check |
-| S-H7 | Orphan data on case delete | ⚠️ Partial | Migration 006 (CASCADE on case_reviewers) ✅ exists; `deleteChatHistory()` NOT implemented |
-| S-M1 | Playground no role-based authorization | ⬜ Open | `callerRoles` + `_caller_is_staff()` NOT implemented |
+| S-H6 | Guardrail bypass on first turn | ✅ Fixed | Guardrail `apply_guardrail` now applied to initial case context query on first turn; fails closed on guardrail error |
+| S-H7 | Orphan data on case delete | ✅ Fixed | Migration 006 (CASCADE on case_reviewers) + `deleteChatHistory()` implemented and wired into instructor delete route |
+| S-M1 | Playground no role-based authorization | ✅ Fixed | WebSocket `default.js` has `isStaff` RBAC gate; playground Lambda adds defense-in-depth `callerRoles` check |
 | S-M2 | User enumeration via `/student/get_name` | ⏸ Deferred | Product decision: restrict to instructor relationship |
 | S-M3 | Client-controlled `audio_file_id` | ⏸ Deferred | Low exploitability — IDs are UUIDs scoped to authenticated user's S3 prefix; server-generated UUIDs recommended as hardening but no immediate risk |
 | S-M4 | CORS falls back to wildcard silently | ✅ Fixed | Warning logged in utils.js and notificationService when `ALLOWED_ORIGIN` unset |
@@ -46,11 +46,11 @@ Individual review files (`code-review-*.md`) include per-issue **Status** lines 
 | H1 | Message limit fail open | ⬜ Open | See S-H2 — still has `pass` on exception |
 | H2 | DB connection not returned to pool on error paths | ✅ Fixed | Context managers (`with conn.cursor() as cur:`) confirmed in text_generation, summary_generation, assess_progress |
 | H3 | Stale DB connection | ⬜ Open | No `SELECT 1` health check + reconnect in Python `connect_to_db()` |
-| H4 | Guardrail bypass | ⬜ Open | See S-H6 — first turn still skips guardrail |
+| H4 | Guardrail bypass | ✅ Fixed | First turn now has guardrail check applied to initial case context query |
 | H5 | `audioToText` polling loop | ⏸ Deferred | Requires architectural change to Step Functions / event-driven design; current polling works correctly and timeout is bounded — deferring to a dedicated refactor sprint |
 | M1 | Code duplication across Lambdas | ⬜ Open | bedrock_client layer directory exists but source .py files are missing; no Lambda imports from it |
 | M2 | SSM parameters never refreshed on warm starts | ⬜ Open | Add TTL-based refresh (e.g., re-fetch every 5 minutes) |
-| M3 | Playground no role check | ⬜ Open | See S-M1 — `_caller_is_staff()` NOT implemented |
+| M3 | Playground no role check | ✅ Fixed | See S-M1 — WebSocket RBAC gate + Lambda-level `callerRoles` defense-in-depth check |
 | M4 | CORS wildcard silent fallback | ✅ Fixed | Warning logged in utils.js and notificationService when `ALLOWED_ORIGIN` unset |
 | M5 | Inconsistent Bedrock invocation patterns | ⬜ Open | Shared bedrock_client layer not functional (source files missing, no imports) |
 | M6 | `__pycache__` in repo | ✅ Fixed | Added to `.gitignore`; tracked `.pyc` files removed from index |
@@ -67,7 +67,7 @@ Individual review files (`code-review-*.md`) include per-issue **Status** lines 
 |----|-------|--------|-------|
 | C1 | Authorizer `responseStruct` | ⬜ Open | See S-C3 — `buildAuthResponse()` NOT implemented |
 | H1 | Stale `postgres` connection | ✅ Fixed | Health check (`SELECT 1`) + reconnect on stale connection in `initializeConnection()` |
-| H2 | Case delete orphans | ⚠️ Partial | Migration 006 (CASCADE on case_reviewers) ✅ added; `deleteChatHistory()` still missing |
+| H2 | Case delete orphans | ✅ Fixed | Migration 006 (CASCADE on case_reviewers) + `deleteChatHistory()` implemented and wired into delete route |
 | H3 | WebSocket token via `Sec-WebSocket-Protocol` | ⬜ Open | Accepted browser WebSocket trade-off; documented |
 | H4 | `markAllNotificationsAsRead` no pagination | ✅ Fixed | Paginated with `LastEvaluatedKey` loop + 25-item batches with `Promise.allSettled` for partial failure handling |
 | M1 | Code duplication across authorizer functions | ⬜ Open | No `authorizerBase.js` exists |
@@ -170,7 +170,7 @@ Individual review files (`code-review-*.md`) include per-issue **Status** lines 
 | BDK-M1 | No output guardrails applied to model responses | ✅ Fixed | Changed `outputStrength` from `"NONE"` to `"MEDIUM"` for PROMPT_ATTACK filter |
 | BDK-M2 | Significant code duplication in model invocation logic | ⬜ Open | bedrock_client layer not functional (source missing, no imports) |
 | BDK-M3 | Missing guardrail permissions for summary/assess | ✅ Fixed | `bedrock:ApplyGuardrail` added to summaryGenerationFunction and assessProgressFunction |
-| BDK-M4 | Playground guardrail has fail-open behavior | ⬜ Open | Fail-closed handling NOT implemented |
+| BDK-M4 | Playground guardrail has fail-open behavior | ✅ Fixed | Guardrail exception now fails closed — returns 503 with user-friendly WebSocket error |
 | BDK-M5 | Unused `caseGenGuardrail` resource in CDK | ✅ Fixed | Removed unused caseGenGuardrail and caseGenGuardrailVersion from api-stack.ts |
 | BDK-M6 | No cost tracking or usage attribution per user/case | ⬜ Open | Log token usage with user/case metadata |
 | BDK-L1 | Inconsistent invocation patterns (LangChain vs boto3) | ⬜ Open | Shared module not functional |

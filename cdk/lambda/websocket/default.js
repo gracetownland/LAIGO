@@ -145,6 +145,7 @@ exports.handler = async (event, context) => {
       const playgroundPayload = {
         isWebSocket: true,
         userId: userId,
+        callerRoles: roles,
         requestId: requestId,
         queryStringParameters: {
           playground_mode: "true",

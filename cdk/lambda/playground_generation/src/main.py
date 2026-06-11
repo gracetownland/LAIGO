@@ -109,6 +109,18 @@ def handler(event, context):
     logger.info("Playground Generation Lambda function is called!")
     initialize_constants()
     
+    # Defense-in-depth: verify caller has staff role (admin or instructor)
+    # Primary RBAC check is in the WebSocket default handler; this is a secondary safeguard
+    caller_roles = event.get("callerRoles", [])
+    if not isinstance(caller_roles, list):
+        caller_roles = []
+    
+    is_staff = "admin" in caller_roles or "instructor" in caller_roles
+    if not is_staff:
+        logger.warn("Unauthorized playground access — caller lacks admin/instructor role", 
+                    extra={"userId": event.get("userId"), "callerRoles": caller_roles})
+        return create_response(403, {"error": "Forbidden: Administrative access required"}, event)
+    
     # Extract request context
     is_websocket = event.get("isWebSocket", False)
     request_context = event.get("requestContext", {})
@@ -197,7 +209,17 @@ def handler(event, context):
             logger.warning("Guardrail environment variables not set for playground")
     except Exception as guardrail_error:
         logger.error(f"Error applying guardrail to playground input: {guardrail_error}")
-        # Continue processing even if guardrail check fails (fail open for admins/instructors)
+        # Fail closed — do not process request without guardrail validation
+        try:
+            websocket_endpoint = os.environ.get("WEBSOCKET_API_ENDPOINT", f"https://{domain_name}/{stage}")
+            apigw_client = boto3.client('apigatewaymanagementapi', endpoint_url=websocket_endpoint)
+            apigw_client.post_to_connection(
+                ConnectionId=connection_id,
+                Data=json.dumps({"action": "playground_test", "type": "error", "requestId": request_id, "content": "Content validation is temporarily unavailable. Please try again later."}).encode('utf-8')
+            )
+        except Exception as ws_error:
+            logger.error(f"Failed to send guardrail failure message to WebSocket: {ws_error}")
+        return {"statusCode": 503}
     
     try:
          # Create LLM with custom configuration and guardrails
