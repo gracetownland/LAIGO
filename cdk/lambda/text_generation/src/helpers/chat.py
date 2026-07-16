@@ -1,3 +1,4 @@
+import os
 import boto3, re, time, logging
 from langchain_aws import ChatBedrockConverse
 from langchain_core.messages import AIMessage, HumanMessage
@@ -41,6 +42,26 @@ except ImportError:
         return (sanitized, False)
 
 _chat_logger = logging.getLogger(__name__)
+
+# Bedrock Runtime client for guardrail re-validation of case context
+try:
+    from bedrock_client import get_bedrock_runtime_client
+    _bedrock_runtime = get_bedrock_runtime_client(region_name=os.environ.get("REGION"))
+except Exception:
+    _bedrock_runtime = None
+    _chat_logger.warning("Could not initialize bedrock_runtime client for guardrail validation in chat module")
+
+_GUARDRAIL_ID = os.environ.get("GUARDRAIL_ID")
+_GUARDRAIL_VERSION = os.environ.get("GUARDRAIL_VERSION")
+
+
+class GuardrailIntervenedException(Exception):
+    """Raised when Bedrock Guardrail intervenes on case context during system prompt construction."""
+
+    def __init__(self, message: str = "Case content blocked by guardrail", guardrail_response: dict = None):
+        super().__init__(message)
+        self.guardrail_response = guardrail_response or {}
+
 
 class LLM_evaluation(BaseModel):
     response: str = Field(description="Assessment of the student's answer with a follow-up question.")
@@ -141,7 +162,7 @@ def construct_case_context_prompt(system_prompt: str, case_context: dict) -> str
             "Prompt injection pattern detected in case context during system prompt construction"
         )
     
-    return f"""
+    assembled_prompt = f"""
         Case Context:
         {system_prompt}
         Pay close attention to the latest system prompt I've given you, as it may have been updated since the last message, but don't entirely discard the previous system prompts unless they conflict. This is for your behaviour, you do not need to include it in the response.
@@ -155,6 +176,43 @@ def construct_case_context_prompt(system_prompt: str, case_context: dict) -> str
         
         Relevant documents are not injected in this workflow.
         """
+
+    # Defense-in-depth: re-validate assembled case context with Bedrock Guardrail.
+    # This catches injection attempts even if write-time validation was bypassed
+    # (e.g., via direct DB modification).
+    if _bedrock_runtime and _GUARDRAIL_ID and _GUARDRAIL_VERSION:
+        try:
+            guard_response = _bedrock_runtime.apply_guardrail(
+                guardrailIdentifier=_GUARDRAIL_ID,
+                guardrailVersion=_GUARDRAIL_VERSION,
+                source="INPUT",
+                content=[{"text": {"text": assembled_prompt, "qualifiers": ["guard_content"]}}]
+            )
+            if guard_response.get("action") == "GUARDRAIL_INTERVENED":
+                _chat_logger.warning(
+                    "Guardrail intervened on assembled case context prompt: %s",
+                    guard_response
+                )
+                raise GuardrailIntervenedException(
+                    message="Case content blocked by content policy during system prompt construction",
+                    guardrail_response=guard_response
+                )
+        except GuardrailIntervenedException:
+            raise
+        except Exception as e:
+            _chat_logger.error("Error applying guardrail to case context: %s", e)
+            # Fail closed: do not proceed without guardrail validation
+            raise GuardrailIntervenedException(
+                message="Unable to validate case content against guardrail",
+                guardrail_response={}
+            )
+    else:
+        _chat_logger.warning(
+            "Guardrail re-validation skipped: bedrock_runtime=%s, GUARDRAIL_ID=%s, GUARDRAIL_VERSION=%s",
+            _bedrock_runtime is not None, _GUARDRAIL_ID, _GUARDRAIL_VERSION
+        )
+
+    return assembled_prompt
 
 def get_response(
     query: str,

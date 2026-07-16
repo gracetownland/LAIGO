@@ -7,7 +7,7 @@ import functools
 from aws_lambda_powertools import Logger, Metrics
 from bedrock_client import get_bedrock_runtime_client
 
-from helpers.chat import get_bedrock_llm, get_initial_student_query, get_response, get_streaming_response
+from helpers.chat import get_bedrock_llm, get_initial_student_query, get_response, get_streaming_response, GuardrailIntervenedException
 from helpers.usage import check_and_increment_usage
  
 # Set up logging and metrics for the Lambda function
@@ -266,11 +266,11 @@ def get_audio_details(case_id):
             WHERE case_id = %s;
         """, (case_id,))        
         result = cur.fetchone()
-        logger.info(f"Query result: {result}")        
+        logger.info(f"Query result found: {result is not None}")        
         cur.close()
         if result:
             audio_description = result[0]
-            logger.info(f"Audio description found for case_id {case_id}: {audio_description}")
+            logger.info(f"Audio description found for case_id {case_id}")
             return audio_description
         else:
             logger.error(f"No audio description found for case_id {case_id}")
@@ -301,14 +301,13 @@ def get_case_details(case_id):
         """, (case_id,))
 
         result = cur.fetchone()
-        logger.info(f"Query result: {result}")
+        logger.info(f"Query result found: {result is not None}")
 
         cur.close()
  
         if result:
             case_title, case_type, jurisdiction, case_description, province, statute = result
-            logger.info(f"Case details found for case_id {case_id}: "
-                        f"Title: {case_title} \n Case type: {case_type} \n Jurisdiction: {jurisdiction} \n Case description: {case_description}, Province: {province}, Statute: {statute}")
+            logger.info(f"Case details found for case_id {case_id}: type={case_type}, jurisdiction={jurisdiction}")
             return case_title, case_type, jurisdiction, case_description, province, statute
         else:
             logger.warning(f"No details found for case_id {case_id}")
@@ -609,6 +608,33 @@ def handler(event, context):
                 "AI response generated",
                 responseLength=len(str(response or "")),
             )
+
+    except GuardrailIntervenedException as ge:
+        logger.warning(f"Guardrail intervened during system prompt construction: {ge}")
+        # Determine error message based on guardrail response assessments
+        error_message = "Sorry, I cannot process this case because it appears to contain content that violates our content policy. Please review the case details and try again."
+        guardrail_resp = ge.guardrail_response
+        for assessment in guardrail_resp.get('assessments', []):
+            if 'sensitiveInformationPolicy' in assessment:
+                error_message = ("Sorry, I cannot process this case because it appears to contain personal information in the case details. "
+                                "Please remove personal identifiable information (Names, Phone Numbers, Addresses, etc.) from the case description.")
+                break
+
+        if is_websocket and connection_id:
+            try:
+                websocket_endpoint = os.environ.get("WEBSOCKET_API_ENDPOINT")
+                if not websocket_endpoint:
+                    websocket_endpoint = f"https://{domain_name}/{stage}"
+                apigw_client = boto3.client('apigatewaymanagementapi', endpoint_url=websocket_endpoint)
+                apigw_client.post_to_connection(
+                    ConnectionId=connection_id,
+                    Data=json.dumps({"type": "error", "requestId": request_id, "action": "generate_text", "content": error_message}).encode('utf-8')
+                )
+                return {"statusCode": 200}
+            except Exception as ws_error:
+                logger.error(f"Failed to send guardrail error to WebSocket: {ws_error}")
+                return {"statusCode": 500}
+        return create_response(400, {"error": error_message}, event)
 
     except Exception as e:
         logger.error(f"Error getting response from AI: {e}")

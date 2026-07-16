@@ -7,6 +7,7 @@ import re
 from botocore.exceptions import ClientError
 from aws_lambda_powertools import Logger, Metrics
 from bedrock_client import get_bedrock_runtime_client
+from bedrock_client.sanitizer import sanitize_prompt_input
 
 # Set up logging and metrics for the Lambda function
 logger = Logger(service="AssessProgress")
@@ -21,6 +22,8 @@ TABLE_NAME_PARAM = os.environ["TABLE_NAME_PARAM"]
 BEDROCK_TEMP_PARAM = os.environ.get("BEDROCK_TEMP_PARAM")
 BEDROCK_TOP_P_PARAM = os.environ.get("BEDROCK_TOP_P_PARAM")
 BEDROCK_MAX_TOKENS_PARAM = os.environ.get("BEDROCK_MAX_TOKENS_PARAM")
+GUARDRAIL_ID = os.environ.get("GUARDRAIL_ID")
+GUARDRAIL_VERSION = os.environ.get("GUARDRAIL_VERSION")
 
 # AWS Clients
 secrets_manager_client = boto3.client("secretsmanager")
@@ -199,6 +202,23 @@ def _invoke_assessment_with_retry(system_instructions, human_context, max_attemp
         prompt_context = human_context if attempt == 1 else f"{human_context}{strict_suffix}"
         response_text = invoke_model_text(system_instructions, prompt_context)
         last_response_text = response_text
+
+        # Apply Bedrock Guardrail to LLM output
+        if GUARDRAIL_ID and GUARDRAIL_VERSION:
+            try:
+                output_guard = bedrock_runtime.apply_guardrail(
+                    guardrailIdentifier=GUARDRAIL_ID,
+                    guardrailVersion=GUARDRAIL_VERSION,
+                    source="OUTPUT",
+                    content=[{"text": {"text": response_text, "qualifiers": ["guard_content"]}}],
+                )
+                if output_guard.get("action") == "GUARDRAIL_INTERVENED":
+                    logger.warning("Guardrail intervened on assessment output")
+                    return {"progress": 0, "reasoning": "Assessment could not be completed due to content policy."}, response_text
+            except Exception as e:
+                logger.error(f"Error applying output guardrail: {e}")
+                # Continue without blocking on guardrail failure for output
+
         parsed = _try_parse_assessment_json(response_text)
         if parsed is not None:
             if attempt > 1:
@@ -395,6 +415,51 @@ def _apply_human_effort_cap(result, signals):
         "progress": capped_progress,
         "reasoning": reasoning,
     }
+
+def _apply_guardrail_to_history(formatted_context):
+    """
+    Apply Bedrock Guardrail to the formatted conversation history.
+
+    This is a read-path defense: if the guardrail intervenes, we log the
+    incident and return an empty string so assessment can continue with a
+    safe default. On exception we also log and continue — guardrail failure
+    should not block the assessment entirely.
+
+    Returns:
+        str: The original formatted_context if guardrail passes, or an empty
+             string if the guardrail intervenes or an error occurs.
+    """
+    if not GUARDRAIL_ID or not GUARDRAIL_VERSION:
+        logger.warning(
+            "Guardrail validation skipped for chat history: GUARDRAIL_ID=%s, GUARDRAIL_VERSION=%s",
+            GUARDRAIL_ID,
+            GUARDRAIL_VERSION,
+        )
+        return formatted_context
+
+    if not formatted_context:
+        return formatted_context
+
+    try:
+        guard_response = bedrock_runtime.apply_guardrail(
+            guardrailIdentifier=GUARDRAIL_ID,
+            guardrailVersion=GUARDRAIL_VERSION,
+            source="INPUT",
+            content=[{"text": {"text": formatted_context, "qualifiers": ["guard_content"]}}],
+        )
+        if guard_response.get("action") == "GUARDRAIL_INTERVENED":
+            logger.warning(
+                "Guardrail intervened on chat history content: %s",
+                json.dumps(guard_response),
+            )
+            return ""
+    except Exception as e:
+        logger.error("Error applying guardrail to chat history: %s", e)
+        # Continue with original content — don't block assessment on guardrail failure
+        return formatted_context
+
+    return formatted_context
+
 
 def get_secret(secret_name, expect_json=True):
     global db_secret
@@ -801,8 +866,23 @@ def handler(event, context):
         
         logger.info(f"Fetched {len(chat_history)} chars of chat history for session {playground_session_id}")
         
+        # Sanitize chat history before building assessment context
+        chat_history, injection_detected = sanitize_prompt_input(chat_history)
+        if injection_detected:
+            logger.warning("Prompt injection pattern detected in playground chat history for session %s", playground_session_id)
+
         assessment_context = _build_assessment_context(chat_history)
         signals = assessment_context["signals"]
+
+        # Apply Bedrock Guardrail to formatted conversation history
+        assessment_context["formatted_context"] = _apply_guardrail_to_history(assessment_context["formatted_context"])
+        if not assessment_context["formatted_context"]:
+            logger.warning("Guardrail cleared playground chat history for session %s, returning safe default", playground_session_id)
+            safe_data = {'unlocked': False, 'progress': 0, 'reasoning': 'Unable to assess progress due to content policy restrictions.'}
+            if is_websocket and connection_id:
+                send_to_websocket(connection_id, ws_endpoint, request_id, "complete", data=safe_data)
+                return {"statusCode": 200}
+            return create_response(200, safe_data, event)
 
         # Construct system instruction
         system_instructions = _build_assessment_system_instructions(block_type, custom_prompt)
@@ -895,7 +975,12 @@ def handler(event, context):
     if not chat_history:
         logger.info(f"No chat history found for session {session_id}")
         return create_response(200, {'unlocked': False, 'progress': 0, 'reasoning': 'Insufficient chat history.'}, event)
-        
+
+    # Sanitize chat history before building assessment context
+    chat_history, injection_detected = sanitize_prompt_input(chat_history)
+    if injection_detected:
+        logger.warning("Prompt injection pattern detected in chat history for session %s", session_id)
+
     prompt_template = get_assessment_prompt_template(block_type)
     if not prompt_template:
         logger.error(f"Assessment prompt not found for {block_type}")
@@ -903,6 +988,16 @@ def handler(event, context):
 
     assessment_context = _build_assessment_context(chat_history)
     signals = assessment_context["signals"]
+
+    # Apply Bedrock Guardrail to formatted conversation history
+    assessment_context["formatted_context"] = _apply_guardrail_to_history(assessment_context["formatted_context"])
+    if not assessment_context["formatted_context"]:
+        logger.warning("Guardrail cleared chat history for session %s, returning safe default", session_id)
+        safe_data = {'unlocked': False, 'progress': 0, 'reasoning': 'Unable to assess progress due to content policy restrictions.'}
+        if is_websocket and connection_id:
+            send_to_websocket(connection_id, ws_endpoint, request_id, "complete", data=safe_data)
+            return {"statusCode": 200}
+        return create_response(200, safe_data, event)
 
     # Construct complete prompt
     system_instructions = _build_assessment_system_instructions(block_type, prompt_template)

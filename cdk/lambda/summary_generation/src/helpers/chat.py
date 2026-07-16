@@ -29,6 +29,10 @@ dynamodb = boto3.client('dynamodb')
 _REGION = os.environ.get("REGION")
 bedrock_runtime = _get_bedrock_runtime_client(region_name=_REGION)
 
+# Guardrail configuration
+GUARDRAIL_ID = os.environ.get("GUARDRAIL_ID")
+GUARDRAIL_VERSION = os.environ.get("GUARDRAIL_VERSION")
+
 try:
     from bedrock_client.sanitizer import sanitize_prompt_input
 except ImportError:
@@ -50,6 +54,46 @@ except ImportError:
                 logger.warning("Prompt injection pattern detected in user input (first 100 chars): %.100s", sanitized)
                 return (sanitized, True)
         return (sanitized, False)
+
+
+def _apply_guardrail(text: str, source: str) -> tuple[str, bool]:
+    """
+    Apply Bedrock Guardrail to text content.
+
+    Args:
+        text: The text to validate.
+        source: Either "INPUT" or "OUTPUT".
+
+    Returns:
+        Tuple of (text, intervened). If guardrail intervenes, returns ("", True).
+        If guardrail is not configured or an error occurs, returns (text, False).
+    """
+    if not GUARDRAIL_ID or not GUARDRAIL_VERSION:
+        return (text, False)
+
+    if not text:
+        return (text, False)
+
+    try:
+        guard_response = bedrock_runtime.apply_guardrail(
+            guardrailIdentifier=GUARDRAIL_ID,
+            guardrailVersion=GUARDRAIL_VERSION,
+            source=source,
+            content=[{"text": {"text": text, "qualifiers": ["guard_content"]}}],
+        )
+        if guard_response.get("action") == "GUARDRAIL_INTERVENED":
+            logger.warning(
+                "Guardrail intervened on %s content: %s",
+                source,
+                json.dumps(guard_response),
+            )
+            return ("", True)
+    except Exception as e:
+        logger.error("Error applying guardrail (%s): %s", source, e)
+        # Continue without blocking on guardrail failure
+        return (text, False)
+
+    return (text, False)
 
 
 def _is_anthropic_model(model_id: str) -> bool:
@@ -281,6 +325,16 @@ def generate_lawyer_summary(
     if not prompt_instruction:
         raise ValueError(f"Missing active summary prompt for block_type: {block_type}")
 
+    # Sanitize conversation history before processing
+    conversation_history, history_injection_detected = sanitize_prompt_input(conversation_history or "")
+    if history_injection_detected:
+        logger.warning("Prompt injection pattern detected in conversation history for summary generation")
+
+    # Apply Bedrock Guardrail to conversation history (INPUT)
+    conversation_history, input_intervened = _apply_guardrail(conversation_history, "INPUT")
+    if input_intervened:
+        raise ValueError("Content policy violation detected in conversation history. Summary cannot be generated.")
+
     # Sanitize user-provided case context before interpolation into prompt
     case_type_clean, ct_flag = sanitize_prompt_input(case_type or "")
     case_description_clean, cd_flag = sanitize_prompt_input(case_description or "")
@@ -310,7 +364,14 @@ Jurisdiction: {jurisdiction_clean or 'Not Specified'}
     """.strip()
 
     user_prompt = f"Please summarize the following conversation:\n\n---\n{conversation_history}\n---\n\nAdhere strictly to the critical output instructions."
-    return _invoke_model_text(llm, system_prompt, user_prompt)
+    result = _invoke_model_text(llm, system_prompt, user_prompt)
+
+    # Apply Bedrock Guardrail to LLM output (OUTPUT)
+    result, output_intervened = _apply_guardrail(result, "OUTPUT")
+    if output_intervened:
+        raise ValueError("Content policy violation detected in generated summary. Summary cannot be returned.")
+
+    return result
 
 def generate_lawyer_summary_streaming(
     conversation_history: str, 
@@ -340,6 +401,16 @@ def generate_lawyer_summary_streaming(
 
     if not prompt_instruction:
         raise ValueError(f"Missing active summary prompt for block_type: {block_type}")
+
+    # Sanitize conversation history before processing
+    conversation_history, history_injection_detected = sanitize_prompt_input(conversation_history or "")
+    if history_injection_detected:
+        logger.warning("Prompt injection pattern detected in conversation history for streaming summary generation")
+
+    # Apply Bedrock Guardrail to conversation history (INPUT)
+    conversation_history, input_intervened = _apply_guardrail(conversation_history, "INPUT")
+    if input_intervened:
+        raise ValueError("Content policy violation detected in conversation history. Summary cannot be generated.")
 
     # Sanitize user-provided case context before interpolation into prompt
     case_type_clean, ct_flag = sanitize_prompt_input(case_type or "")
@@ -372,7 +443,14 @@ Jurisdiction: {jurisdiction_clean or 'Not Specified'}
     user_prompt = f"Please summarize the following conversation:\n\n---\n{conversation_history}\n---\n\nAdhere strictly to the critical output instructions."
 
     try:
-        return _stream_invoke_model_text(llm, system_prompt, user_prompt, send_chunk_callback)
+        result = _stream_invoke_model_text(llm, system_prompt, user_prompt, send_chunk_callback)
+
+        # Apply Bedrock Guardrail to LLM output (OUTPUT)
+        _, output_intervened = _apply_guardrail(result, "OUTPUT")
+        if output_intervened:
+            raise ValueError("Content policy violation detected in generated summary. Summary cannot be returned.")
+
+        return result
     except Exception as e:
         logger.error(f"Error during streaming summary generation: {e}")
         raise

@@ -240,6 +240,28 @@ def add_audio_to_db(audio_file_id, audio_text):
         return {"statusCode": 500, "body": json.dumps({"error": "DB update failed"})}
 
 
+def check_audio_file_ownership(audio_file_id, user_id):
+    """
+    Verify the authenticated user owns the case associated with the audio file.
+    Returns True if authorized, False otherwise.
+    """
+    try:
+        conn = connect_to_db()
+        cur = conn.cursor()
+        cur.execute(
+            'SELECT 1 FROM audio_files af JOIN cases c ON af.case_id = c.case_id WHERE af.audio_file_id = %s AND c.student_id = %s',
+            (audio_file_id, user_id),
+        )
+        result = cur.fetchone()
+        cur.close()
+        return result is not None
+    except Exception as e:
+        logger.error(f"Ownership check failed: {e}")
+        if connection:
+            connection.rollback()
+        return False
+
+
 
 def get_cors_origin(event):
     """
@@ -451,6 +473,13 @@ def handler(event, context):
             if user_id:
                 publish_transcription_notification_event(audio_file_id, user_id, file_name, case_title, case_id, success=False, error_message=f"Missing parameters: {missing}")
             return _error_response(400, f"Missing parameters: {missing}", is_websocket, connection_id, ws_endpoint, request_id, event=event)
+
+        # Ownership verification: ensure the authenticated user owns the audio file's case
+        if not user_id:
+            return _error_response(403, "Forbidden: unable to identify user", is_websocket, connection_id, ws_endpoint, request_id, event=event)
+
+        if not check_audio_file_ownership(audio_file_id, user_id):
+            return _error_response(403, "Forbidden: you do not have access to this resource", is_websocket, connection_id, ws_endpoint, request_id, event=event)
 
         # 2a. Validate physical file integrity (Server-side validation)
         object_key = f"{audio_file_id}/{file_name}.{file_type}"
