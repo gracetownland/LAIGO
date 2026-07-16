@@ -31,6 +31,7 @@ import ArticleIcon from "@mui/icons-material/Article";
 import AssignmentIcon from "@mui/icons-material/Assignment";
 import { useParams, useOutletContext } from "react-router-dom";
 import { fetchAuthSession } from "aws-amplify/auth";
+import DOMPurify from "dompurify";
 import { useWebSocket } from "../../hooks/useWebSocket";
 import type { CaseOutletContext } from "./CaseLayout";
 
@@ -304,9 +305,9 @@ const CaseSummaries: React.FC = () => {
 
     // Convert markdown directly to HTML string
     // We use marked.parse() to get the HTML string
-    const bodyHtml = await (marked.parse(
-      summary.content || "",
-    ) as Promise<string>);
+    const bodyHtml = DOMPurify.sanitize(
+      await (marked.parse(summary.content || "") as Promise<string>),
+    );
 
     // Combine and set innerHTML
     element.innerHTML =

@@ -14,8 +14,15 @@ const {
   EventBridgeClient,
   PutEventsCommand,
 } = require("@aws-sdk/client-eventbridge");
+const {
+  BedrockRuntimeClient,
+  ApplyGuardrailCommand,
+} = require("@aws-sdk/client-bedrock-runtime");
 
 const eventBridge = new EventBridgeClient({});
+const bedrockRuntime = new BedrockRuntimeClient({});
+
+const { GUARDRAIL_ID, GUARDRAIL_VERSION } = process.env;
 
 let { CASE_TYPES_PARAM } = process.env;
 
@@ -983,18 +990,18 @@ const routes = {
 
         const data = await ddbClient.send(command);
 
-        logger.info("Query results: ", data);
+        logger.info("Query results retrieved", { itemCount: data.Items?.length || 0 });
 
         if (data.Items && data.Items.length > 0) {
           const messages = data.Items[0].History.L;
 
-          logger.info("MESSAGES: ", messages);
+          logger.info("Messages retrieved", { messageCount: messages.length });
           const extractedMessages = messages.map((m) => ({
             type: m.M.data.M.type.S, // "human" or "ai"
             content: m.M.data.M.content.S, // Extracting only the message content
           }));
 
-          logger.info("EXTRACTED MESSAGES: ", extractedMessages);
+          logger.info("Messages extracted", { messageCount: extractedMessages.length });
           if (messages.length > 0) {
             response.body = JSON.stringify(extractedMessages); // Return the message content as JSON
           } else {
@@ -1155,6 +1162,46 @@ const routes = {
           response.body = JSON.stringify({
             error: "Please select a valid broad area of law.",
           });
+          return;
+        }
+
+        // Guardrail validation: validate case metadata before persistence
+        const fieldsToValidate = [
+          case_description,
+          case_type,
+          jurisdiction,
+          province,
+          statute,
+        ]
+          .filter(Boolean)
+          .join(" | ");
+
+        try {
+          const guardCommand = new ApplyGuardrailCommand({
+            guardrailIdentifier: GUARDRAIL_ID,
+            guardrailVersion: GUARDRAIL_VERSION,
+            source: "INPUT",
+            content: [{ text: { text: fieldsToValidate, qualifiers: ["guard_content"] } }],
+          });
+          const guardResponse = await bedrockRuntime.send(guardCommand);
+
+          if (guardResponse.action === "GUARDRAIL_INTERVENED") {
+            logger.info("Guardrail blocked case edit", { case_id });
+            let errorMessage = "Your case details contain content that violates our content policy. Please review and try again.";
+            for (const assessment of guardResponse.assessments || []) {
+              if (assessment.sensitiveInformationPolicy) {
+                errorMessage = "Your case details appear to contain personal information. Please remove personally identifiable information (names, phone numbers, addresses, etc.) and try again.";
+                break;
+              }
+            }
+            response.statusCode = 400;
+            response.body = JSON.stringify({ error: errorMessage });
+            return;
+          }
+        } catch (guardrailError) {
+          logger.error("Guardrail validation failed", { error: guardrailError.message, case_id });
+          response.statusCode = 503;
+          response.body = JSON.stringify({ error: "Unable to validate case content. Please try again later." });
           return;
         }
 

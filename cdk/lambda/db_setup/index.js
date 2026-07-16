@@ -179,9 +179,9 @@ async function createAppUsers(
 
   await adminClient.query("BEGIN");
   try {
-    await adminClient.query(sql);
-
+    // Create/update users first so they exist before granting roles
     await adminClient.query(createOrUpdateUserSql);
+    await adminClient.query(sql);
     await adminClient.query("COMMIT");
   } catch (e) {
     await adminClient.query("ROLLBACK");

@@ -319,8 +319,7 @@ const CaseTranscriptions: React.FC = () => {
             `file_name=${encodeURIComponent(audioFile.name)}&` +
             `file_type=${encodeURIComponent(audioFile.type)}&` +
             `case_title=${encodeURIComponent(caseData?.case_title || "Unknown Case")}&` +
-            `case_id=${encodeURIComponent(caseId || "unknown")}&` +
-            `cognito_token=${encodeURIComponent(token)}`,
+            `case_id=${encodeURIComponent(caseId || "unknown")}`,
           {
             method: "GET",
             headers: {
@@ -466,7 +465,9 @@ const CaseTranscriptions: React.FC = () => {
 
     const tempDiv = document.createElement("div");
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    tempDiv.innerHTML = await (marked.parse(audioText || "") as any);
+    tempDiv.innerHTML = DOMPurify.sanitize(
+      await (marked.parse(audioText || "") as any),
+    );
     const content = tempDiv.textContent || tempDiv.innerText || "";
     const lines = doc.splitTextToSize(content, 180);
 

@@ -5,6 +5,7 @@ const {
   handleError,
   getSqlConnection,
 } = require("./utils/utils");
+const { emitAuditRecord } = require("./utils/audit");
 const { Logger } = require("@aws-lambda-powertools/logger");
 const logger = new Logger({ serviceName: "AdminFunction" });
 
@@ -373,7 +374,7 @@ const routes = {
     }
   },
   "PUT /admin/user_role": async (event, env) => {
-    const { response, sqlConnection } = env;
+    const { response, user_id, sqlConnection } = env;
     try {
       if (!event.body) throw new Error("Request body is missing");
       const { email: userEmail, operation, role } = parseBody(event.body);
@@ -455,6 +456,18 @@ const routes = {
         }
       }
 
+      emitAuditRecord({
+        actorId: user_id,
+        actorEmail: env.user?.email,
+        action: "ROLE_CHANGE",
+        resourceType: "USER_ROLE",
+        resourceId: userIdToUpdate,
+        outcome: "success",
+        before: { roles: currentRoles },
+        after: { roles: operation === "add" ? [...currentRoles, role] : currentRoles.filter(r => r !== role) },
+        metadata: { operation, role, targetEmail: userEmail },
+      });
+
       response.statusCode = 200;
       response.body = JSON.stringify({
         success: true,
@@ -515,6 +528,16 @@ const routes = {
             }, ${prompt_text}, ${promptAuthorId || null}, false)
             RETURNING *;
           `;
+
+      emitAuditRecord({
+        actorId: user_id,
+        actorEmail: env.user?.email,
+        action: "PROMPT_CREATE",
+        resourceType: "PROMPT",
+        resourceId: insertPrompt[0]?.prompt_version_id || null,
+        outcome: "success",
+        metadata: { category, block_type: block_type || null, prompt_scope: resolvedScope, version_number: nextVersion },
+      });
 
       response.body = JSON.stringify(insertPrompt[0]);
     } catch (err) {
@@ -716,6 +739,16 @@ const routes = {
               SET is_active = true
               WHERE prompt_version_id = ${prompt_version_id};
             `;
+      });
+
+      emitAuditRecord({
+        actorId: env.user_id,
+        actorEmail: env.user?.email,
+        action: "PROMPT_ACTIVATE",
+        resourceType: "PROMPT",
+        resourceId: prompt_version_id,
+        outcome: "success",
+        metadata: { category, block_type: block_type || null, prompt_scope: prompt_scope || "block" },
       });
 
       response.body = JSON.stringify({
@@ -1022,6 +1055,16 @@ const routes = {
       }
 
       await Promise.all(promises);
+
+      emitAuditRecord({
+        actorId: env.user_id,
+        actorEmail: env.user?.email,
+        action: "AI_CONFIG_UPDATE",
+        resourceType: "AI_CONFIG",
+        resourceId: null,
+        outcome: "success",
+        metadata: { changedFields: Object.keys(body).filter(k => body[k] !== undefined) },
+      });
 
       response.statusCode = 200;
       response.body = JSON.stringify({ success: true });

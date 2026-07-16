@@ -211,5 +211,16 @@ export class DatabaseStack extends Stack {
 
     // Store the proxy endpoint for use by other stacks
     this.rdsProxyEndpoint = rdsProxy.endpoint;
+
+    // Configure automatic rotation for the application user secret
+    // Rotates credentials every 30 days using AWS-managed PostgreSQL single-user rotation
+    new secretsmanager.SecretRotation(this, 'AppUserSecretRotation', {
+      application: secretsmanager.SecretRotationApplication.POSTGRES_ROTATION_SINGLE_USER,
+      secret: this.secretPathUser,
+      target: this.dbInstance,
+      vpc: vpcStack.vpc,
+      automaticallyAfter: Duration.days(30),
+      securityGroup: this.dbClientSecurityGroup,
+    });
   }
 }

@@ -1478,6 +1478,8 @@ export class ApiGatewayStack extends cdk.Stack {
           CASE_TYPES_PARAM: caseTypesParameter.parameterName,
           NOTIFICATION_EVENT_BUS_NAME: notificationEventBus.eventBusName,
           TABLE_NAME: `${id}-Conversation-Table`,
+          GUARDRAIL_ID: textGenGuardrail.attrGuardrailId,
+          GUARDRAIL_VERSION: textGenGuardrailVersion.attrVersion,
           ...corsEnv,
         },
         functionName: `${id}-studentFunction`,
@@ -1509,6 +1511,15 @@ export class ApiGatewayStack extends cdk.Stack {
     messageLimitParameter.grantRead(lambdaStudentFunction);
     fileSizeLimitParameter.grantRead(lambdaStudentFunction);
     caseTypesParameter.grantRead(lambdaStudentFunction);
+
+    // Grant Bedrock Guardrail permissions to student function (for edit_case validation)
+    lambdaStudentFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ["bedrock:InvokeGuardrail", "bedrock:ApplyGuardrail"],
+        resources: [textGenGuardrail.attrGuardrailArn],
+      }),
+    );
 
     // Override logical ID to reference from OpenAPI document
     const apiGW_studentCasesFunction = lambdaStudentFunction.node
@@ -1968,6 +1979,8 @@ export class ApiGatewayStack extends cdk.Stack {
           BEDROCK_MAX_TOKENS_PARAM: bedrockMaxTokensParameter.parameterName,
           TABLE_NAME: `${id}-Conversation-Table`,
           PLAYGROUND_TABLE_NAME: playgroundTable.tableName,
+          GUARDRAIL_ID: textGenGuardrail.attrGuardrailId,
+          GUARDRAIL_VERSION: textGenGuardrailVersion.attrVersion,
           ...corsEnv,
         },
       },
@@ -2212,6 +2225,8 @@ export class ApiGatewayStack extends cdk.Stack {
           BEDROCK_TOP_P_PARAM: bedrockTopPParameter.parameterName,
           BEDROCK_MAX_TOKENS_PARAM: bedrockMaxTokensParameter.parameterName,
           TABLE_NAME: `${id}-Conversation-Table`,
+          GUARDRAIL_ID: textGenGuardrail.attrGuardrailId,
+          GUARDRAIL_VERSION: textGenGuardrailVersion.attrVersion,
           ...corsEnv,
         },
       },

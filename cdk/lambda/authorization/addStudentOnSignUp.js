@@ -36,8 +36,8 @@ async function getSignupMode() {
     );
     return result?.Parameter?.Value || "public";
   } catch (err) {
-    logger.warn("Could not read SignupMode SSM param, defaulting to public", { err });
-    return "public";
+    logger.error("Failed to read SignupMode SSM param — failing closed to restrict access", { err });
+    throw err;
   }
 }
 
