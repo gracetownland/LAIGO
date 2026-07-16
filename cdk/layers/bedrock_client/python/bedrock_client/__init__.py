@@ -5,6 +5,7 @@ import boto3
 from botocore.config import Config
 
 from bedrock_client.sanitizer import sanitize_prompt_input
+from bedrock_client.authorization import verify_case_ownership, verify_audio_file_ownership
 
 # Adaptive retry configuration for Bedrock API calls.
 # Handles throttling (ThrottlingException, TooManyRequestsException) and
@@ -40,4 +41,4 @@ def get_bedrock_runtime_client(region_name=None):
     return boto3.client("bedrock-runtime", **kwargs)
 
 
-__all__ = ["sanitize_prompt_input", "get_bedrock_runtime_client"]
+__all__ = ["sanitize_prompt_input", "get_bedrock_runtime_client", "verify_case_ownership", "verify_audio_file_ownership"]
